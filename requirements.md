@@ -56,7 +56,7 @@ HTTPS Path: https://{token}@github.com/user/repo.git
 SSH Path: Standard git@github.com:user/repo.git (requires mounting /root/.ssh in Docker).
 
 ## 3. Revised File Structure
-Plaintext
+```Plaintext
 /brainmaze-ledger/
 ├── .ssh/                    # [OPTIONAL] Mounted for private Git access
 ├── reports/                 # [TEMPORARY] PDF cache for printing
@@ -65,6 +65,7 @@ Plaintext
 │   ├── reports.py          # PDF generation logic
 │   └── git_manager.py      # SSH/PAT credential logic
 └── ...
+```
 
 ## 4. Final Stack Overview (Docker Compose)
 The final setup uses a "Self-Contained Secret" approach for the Git connection.
