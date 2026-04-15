@@ -412,7 +412,10 @@ def page_record_change() -> None:
         with dcol2:
             qty_input = st.number_input("Quantity", min_value=0, value=1, step=1)
 
-        # Preview the resulting delta
+        # Preview the resulting delta.  delta is always defined so that the
+        # post-form validation block can reference it regardless of whether
+        # `current` is available.
+        delta = 0
         if current is not None:
             cur_qty = int(current["quantity"])
             if change_type == "Add Stock":

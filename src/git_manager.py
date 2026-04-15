@@ -25,6 +25,7 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import re
 import subprocess
 import tempfile
 from datetime import datetime, timezone
@@ -33,6 +34,34 @@ from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Input validation helpers
+# ---------------------------------------------------------------------------
+
+# Git branch names: allow alphanumeric, hyphen, underscore, forward slash, dot
+_BRANCH_RE = re.compile(r"^[a-zA-Z0-9._/\-]{1,255}$")
+# Commit messages: printable ASCII + unicode letters/numbers, no shell metacharacters
+_SAFE_COMMIT_MSG_RE = re.compile(r"^[\w\s.,:/\-+#@!()\[\]]{1,500}$", re.UNICODE)
+
+
+def _safe_branch(branch: str) -> str:
+    """Validate and return a safe git branch name, raising ValueError on bad input."""
+    branch = branch.strip()
+    if not _BRANCH_RE.match(branch):
+        raise ValueError(
+            f"Invalid branch name {branch!r}. "
+            "Only alphanumeric characters, hyphens, underscores, dots, and slashes are allowed."
+        )
+    return branch
+
+
+def _safe_commit_msg(msg: str) -> str:
+    """Return a sanitised commit message, replacing unsafe characters."""
+    # Strip any leading/trailing whitespace; replace control characters with a space
+    msg = re.sub(r"[\x00-\x1f\x7f]", " ", msg.strip())
+    # Truncate to a safe length
+    return msg[:500] if msg else "Inventory update"
 
 
 class GitManager:
@@ -167,8 +196,9 @@ class GitManager:
         if self.is_git_repo():
             return True, "Repository already initialised."
 
+        branch = _safe_branch(self.branch)
         # Try git >= 2.28 (supports --initial-branch)
-        code, _, err = self._run(["git", "init", f"--initial-branch={self.branch}"])
+        code, _, err = self._run(["git", "init", f"--initial-branch={branch}"])
         if code != 0:
             code, _, err = self._run(["git", "init"])
         if code != 0:
@@ -212,7 +242,7 @@ class GitManager:
         self._run(["git", "config", "user.email", self.git_user_email])
         self._run(["git", "add", "."])
 
-        commit_msg = message or f"Inventory update {self._utc_now()}"
+        commit_msg = _safe_commit_msg(message or f"Inventory update {self._utc_now()}")
         code, out, err = self._run(["git", "commit", "-m", commit_msg])
         if code == 0:
             return True, f"Committed: {commit_msg}"
@@ -229,7 +259,7 @@ class GitManager:
         auth_url = self._authenticated_url()
         self._run(["git", "remote", "set-url", "origin", auth_url])
 
-        cmd = ["git", "push", "-u", "origin", self.branch]
+        cmd = ["git", "push", "-u", "origin", _safe_branch(self.branch)]
         if force:
             cmd.append("--force")
         code, out, err = self._run(cmd)
@@ -244,7 +274,7 @@ class GitManager:
 
         auth_url = self._authenticated_url()
         self._run(["git", "remote", "set-url", "origin", auth_url])
-        code, out, err = self._run(["git", "pull", "--rebase", "origin", self.branch])
+        code, out, err = self._run(["git", "pull", "--rebase", "origin", _safe_branch(self.branch)])
         if code == 0:
             return True, f"Pulled from '{self.repo_url}'."
         return False, f"Pull failed: {err or out}"

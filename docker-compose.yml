@@ -1,4 +1,4 @@
-version: "3.9"
+version: "3.9"  # kept for compatibility with older Docker Compose v1 installations
 
 services:
   app:
