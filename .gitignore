@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+.venv/
+venv/
+ENV/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime artefacts
+reports/*.pdf
+inventory_data/
+*.tmp
+*.bak
+
+# Docker
+*.tar
+
+# Secrets (never commit these)
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519

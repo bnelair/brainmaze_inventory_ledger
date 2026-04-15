@@ -1,0 +1,11 @@
+project_name: "Brainmaze Laboratory Inventory"
+schema_version: "1.0"
+category_options:
+  - Reagent
+  - Equipment
+  - Consumable
+  - Chemical
+  - Biological
+  - Safety
+  - Administrative
+  - Other
