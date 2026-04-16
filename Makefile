@@ -13,7 +13,8 @@ run:             ## Run Streamlit directly (no Docker)
 	streamlit run src/app.py
 
 lint:            ## Lint Python source files
-	python -m py_compile src/inventory.py src/reports.py src/git_manager.py src/app.py \
+	python -m py_compile src/auth.py src/projects.py src/inventory.py \
+	  src/reports.py src/git_manager.py src/version.py src/app.py \
 	  && echo "Syntax OK"
 
 # ── Docker ───────────────────────────────────────────────────────────────────

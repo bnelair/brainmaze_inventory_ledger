@@ -456,6 +456,12 @@ class InventoryLedger:
             )
             all_events.extend(row_events)
         return all_events
+
+    # ------------------------------------------------------------------
+    # Public read API
+    # ------------------------------------------------------------------
+
+    def get_event_history(self) -> List[Dict[str, Any]]:
         """Return all events in chronological order."""
         return self._load_events()
 

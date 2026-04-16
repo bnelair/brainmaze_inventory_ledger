@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: brainmaze-inventory-ledger:latest
+    image: brainmaze-inventory-ledger:1.0.0
     container_name: brainmaze-ledger
     restart: unless-stopped
 

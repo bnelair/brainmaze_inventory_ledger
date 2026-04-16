@@ -75,6 +75,35 @@ def _safe_git_config_value(value: str, max_len: int = 100) -> str:
     return value[:max_len] if value else "Brainmaze"
 
 
+_SAFE_URL_SCHEMES = frozenset({"https", "http", "git", "ssh"})
+
+
+def _safe_url(url: str) -> str:
+    """
+    Validate that a remote URL uses a known safe scheme and does not start with
+    a dash (which git would interpret as a flag, enabling argument injection).
+
+    Raises ValueError for unsafe inputs.
+    """
+    url = url.strip()
+    if not url:
+        return url
+    if url.startswith("-"):
+        raise ValueError(
+            f"Unsafe repository URL {url!r}: URL must not start with a dash."
+        )
+    # Allow git@host:path SSH shorthand without a scheme
+    if url.startswith("git@"):
+        return url
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in _SAFE_URL_SCHEMES:
+        raise ValueError(
+            f"Unsafe repository URL scheme {parsed.scheme!r}. "
+            f"Allowed schemes: {sorted(_SAFE_URL_SCHEMES)}."
+        )
+    return url
+
+
 class GitManager:
     """
     Manages Git repository operations for inventory-data synchronisation.
@@ -238,7 +267,7 @@ class GitManager:
 
     def setup_remote(self) -> Tuple[bool, str]:
         """Configure the ``origin`` remote (replaces any existing one)."""
-        auth_url = self._authenticated_url()
+        auth_url = _safe_url(self._authenticated_url())
         if not auth_url:
             return False, "No repository URL configured."
 
@@ -283,7 +312,7 @@ class GitManager:
         if not self.repo_url:
             return False, "No remote repository configured."
 
-        auth_url = self._authenticated_url()
+        auth_url = _safe_url(self._authenticated_url())
         self._run(["git", "remote", "set-url", "origin", auth_url])
 
         cmd = ["git", "push", "-u", "origin", _safe_branch(self.branch)]
@@ -299,7 +328,7 @@ class GitManager:
         if not self.repo_url:
             return False, "No remote repository configured."
 
-        auth_url = self._authenticated_url()
+        auth_url = _safe_url(self._authenticated_url())
         self._run(["git", "remote", "set-url", "origin", auth_url])
         code, out, err = self._run(["git", "pull", "--rebase", "origin", _safe_branch(self.branch)])
         if code == 0:

@@ -58,6 +58,7 @@ from git_manager import GitManager   # noqa: E402
 from inventory import InventoryLedger  # noqa: E402
 from projects import ProjectManager  # noqa: E402
 from reports import ReportGenerator  # noqa: E402
+from version import __version__  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -76,7 +77,7 @@ st.set_page_config(
     menu_items={
         "Get Help":     "https://github.com/bnelair/brainmaze_inventory_ledger",
         "Report a bug": "https://github.com/bnelair/brainmaze_inventory_ledger/issues",
-        "About":        "Brainmaze Inventory Ledger – event-sourced lab inventory.",
+        "About":        f"Brainmaze Inventory Ledger v{__version__} – event-sourced lab inventory.",
     },
 )
 
@@ -451,6 +452,7 @@ def _render_sidebar() -> str:
             for k in ["user", "project_id"]:
                 st.session_state.pop(k, None)
             st.rerun()
+        st.caption(f"v{__version__}")
 
     return nav_keys.get(selected, "stock")
 

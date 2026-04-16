@@ -1,5 +1,9 @@
 # 🧪 Brainmaze Inventory Ledger
 
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Python](https://img.shields.io/badge/python-3.11%2B-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
 A **full-stack, event-sourced inventory management system** designed for
 research laboratories.  Every quantity change is stored as an immutable
 event — giving you a tamper-evident audit trail, printable stock sheets, and
@@ -16,6 +20,7 @@ PDF confirmation slips that can be manually signed and physically filed.
 | **Printable Stock Sheets** | Landscape A4 PDF — print and tape to closet doors / bins |
 | **Change Confirmation Slips** | Per-transaction PDF with dual signature lines |
 | **Item History Reports** | Full chronological PDF log per item |
+| **Partial Location Transfer** | Move any quantity to a new location; batch multiple items; auto-creates destination record |
 | **Git Synchronisation** | Push / pull inventory data to GitHub or GitLab |
 | **Three Auth Methods** | PAT (HTTPS), SSH key pair, App / Bot token |
 | **git-crypt support** | Encrypt private data repos; unlock key injected via env var |
@@ -71,10 +76,13 @@ make run       # launch Streamlit on http://localhost:8501
 ```
 brainmaze_inventory_ledger/
 ├── src/
-│   ├── app.py            # Streamlit UI  (7 pages)
+│   ├── app.py            # Streamlit UI  (8 pages)
 │   ├── inventory.py      # Event-sourcing engine
 │   ├── reports.py        # PDF generation (fpdf2)
-│   └── git_manager.py    # Git auth & sync (PAT / SSH / APP)
+│   ├── git_manager.py    # Git auth & sync (PAT / SSH / APP)
+│   ├── auth.py           # User management & bcrypt authentication
+│   ├── projects.py       # Multi-project management
+│   └── version.py        # Single version constant (__version__)
 │
 ├── data/
 │   └── schema.yaml       # Default project schema & category list
@@ -115,6 +123,12 @@ immediately available for download and physical filing.
 Select an existing item and record a stock addition, removal, or exact-value
 set.  The resulting delta is previewed before submission.  A signed PDF slip is
 generated automatically.
+
+### 📍 Transfer Location
+Move any quantity of one or more items to a different storage location in a
+single batch operation.  If no record exists at the destination, one is created
+automatically (cloning all metadata).  A printable **Batch Transfer Slip PDF**
+with from / to / qty columns is generated after each transfer.
 
 ### 📜 Event History
 Immutable, sortable, searchable audit trail.  Any event can be reprinted as an
