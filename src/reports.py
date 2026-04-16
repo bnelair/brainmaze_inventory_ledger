@@ -62,9 +62,8 @@ class ReportGenerator:
         ("unit",            "Unit",         15),
         ("category",        "Category",     28),
         ("location",        "Location",     33),
-        ("min_stock_level", "Min Stock",    18),
         ("supplier",        "Supplier",     38),
-        ("catalog_number",  "Catalog #",    33),
+        ("item_id_label",   "ID",           33),
     ]
 
     def __init__(self, project_name: str = "Brainmaze Inventory") -> None:
@@ -82,7 +81,6 @@ class ReportGenerator:
         """
         Create a landscape A4 stock-level table.
 
-        The table highlights rows where quantity ≤ min_stock_level in red.
         A signature / posting line is added at the bottom.
 
         Returns
@@ -144,22 +142,12 @@ class ReportGenerator:
         # ---- table data rows ------------------------------------------
         pdf.set_font("Helvetica", "", 8)
         for i, (_, row) in enumerate(df.iterrows()):
-            qty = row.get("quantity", 0)
-            min_stock = row.get("min_stock_level", 0)
-
-            low = (
-                pd.notna(min_stock)
-                and int(min_stock) > 0
-                and int(qty) <= int(min_stock)
-            )
-            if low:
-                pdf.set_fill_color(255, 200, 200)
-            elif i % 2 == 0:
+            if i % 2 == 0:
                 pdf.set_fill_color(245, 248, 255)
             else:
                 pdf.set_fill_color(255, 255, 255)
 
-            fill = low or (i % 2 == 0)
+            fill = i % 2 == 0
             for col, _, width in col_data:
                 val = row.get(col, "")
                 val = "" if pd.isna(val) else str(val)
@@ -170,17 +158,6 @@ class ReportGenerator:
         pdf.ln(4)
         pdf.set_font("Helvetica", "B", 10)
         pdf.cell(0, 8, f"Total Items: {len(df)}", new_x="LMARGIN", new_y="NEXT")
-
-        if "min_stock_level" in df.columns and "quantity" in df.columns:
-            low_df = df[(df["min_stock_level"] > 0) & (df["quantity"] <= df["min_stock_level"])]
-            if not low_df.empty:
-                pdf.set_text_color(200, 0, 0)
-                pdf.cell(
-                    0, 8,
-                    f"\u26a0  Low-Stock Alert: {len(low_df)} item(s) at or below minimum threshold \u2014 reorder required",
-                    new_x="LMARGIN", new_y="NEXT",
-                )
-                pdf.set_text_color(0, 0, 0)
 
         # ---- physical posting / verification line ----------------------
         pdf.ln(10)

@@ -521,7 +521,7 @@ def page_stock() -> None:
 
     core_order = [
         "item_name", "quantity", "unit", "category", "location",
-        "min_stock_level", "supplier", "catalog_number", "last_updated",
+        "min_stock_level", "supplier", "item_id_label", "last_updated",
     ]
     custom_names = [
         f["name"] for f in _custom_fields() if f["name"] in filtered.columns
@@ -531,7 +531,7 @@ def page_stock() -> None:
         "item_name": "Item Name", "quantity": "Qty", "unit": "Unit",
         "category": "Category", "location": "Location",
         "min_stock_level": "Min Stock", "supplier": "Supplier",
-        "catalog_number": "Catalog #", "last_updated": "Last Updated",
+        "item_id_label": "ID", "last_updated": "Last Updated",
     }
     for f in _custom_fields():
         col_labels[f["name"]] = f.get("label", f["name"])
@@ -585,9 +585,8 @@ def page_add_item() -> None:
             location = st.text_input("Storage Location", placeholder="e.g., Freezer-1, Shelf-A")
             supplier = st.text_input("Supplier", placeholder="e.g., Sigma-Aldrich")
         with col4:
-            catalog_number = st.text_input("Catalog / CAS Number",
-                                           placeholder="e.g., CAS-64-17-5")
-            min_stock = st.number_input("Minimum Stock Level", min_value=0, value=0, step=1)
+            item_id_label = st.text_input("ID",
+                                           placeholder="e.g., SKU-001, CAS-64-17-5")
 
         notes = st.text_area("Notes", placeholder="Optional additional notes…")
 
@@ -625,8 +624,7 @@ def page_add_item() -> None:
                 category=category,
                 location=location.strip(),
                 supplier=supplier.strip(),
-                catalog_number=catalog_number.strip(),
-                min_stock_level=int(min_stock),
+                item_id_label=item_id_label.strip(),
                 notes=notes.strip(),
                 **custom_values,
             )
@@ -663,9 +661,7 @@ def page_batch_add() -> None:
                                                        options=_category_options()),
         "location":  st.column_config.TextColumn("Location"),
         "supplier":  st.column_config.TextColumn("Supplier"),
-        "catalog_number": st.column_config.TextColumn("Catalog #"),
-        "min_stock_level": st.column_config.NumberColumn("Min Stock", min_value=0,
-                                                          default=0),
+        "item_id_label": st.column_config.TextColumn("ID"),
         "notes":     st.column_config.TextColumn("Notes"),
         "reason":    st.column_config.TextColumn("Reason (overrides batch reason)"),
     }
@@ -796,12 +792,11 @@ def page_record_change() -> None:
         row_match = df[df["item_id"] == item_id]
         current = row_match.iloc[0] if not row_match.empty else None
         if current is not None:
-            mc1, mc2, mc3, mc4 = st.columns(4)
+            mc1, mc2, mc3 = st.columns(3)
             mc1.metric("Current Stock",
                        f"{current['quantity']} {current.get('unit', 'pcs')}")
             mc2.metric("Category",  current.get("category", "—"))
             mc3.metric("Location",  current.get("location", "—"))
-            mc4.metric("Min Stock", current.get("min_stock_level", 0))
 
         st.divider()
         dcol1, dcol2 = st.columns(2)
