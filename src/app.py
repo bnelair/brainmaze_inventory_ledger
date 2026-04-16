@@ -1000,11 +1000,16 @@ def page_transfer_location() -> None:
 
     loc_options = _location_options()
 
-    # Build a label → item_id mapping; label shows name, location, and current qty
+    # Build a label → item_id mapping; item_id is included in the label to
+    # guarantee uniqueness even when multiple rows share the same name/location/qty.
     label_to_id: Dict[str, str] = {}
     for _, row in df.iterrows():
-        lbl = f"{row['item_name']}  @  {row.get('location', '—')}  (qty: {row['quantity']})"
-        label_to_id[lbl] = str(row["item_id"])
+        item_id = str(row["item_id"])
+        lbl = (
+            f"{row['item_name']}  @  {row.get('location', '—')}  "
+            f"(qty: {row['quantity']})  [ID: {item_id}]"
+        )
+        label_to_id[lbl] = item_id
     item_labels = list(label_to_id.keys())
 
     # Reference table for the user
@@ -1279,11 +1284,30 @@ def page_reports() -> None:
         if df.empty:
             st.warning("No inventory items yet.")
         else:
-            names = df.set_index("item_id")["item_name"].to_dict()
-            sel_name = st.selectbox("Select item", list(names.values()),
-                                    key="hist_select")
-            target_id = next((k for k, v in names.items() if v == sel_name), None)
-            if target_id:
+            item_records = (
+                df[["item_id", "item_name", "location"]]
+                .dropna(subset=["item_id"])
+                .drop_duplicates(subset=["item_id"])
+                .set_index("item_id")
+            )
+
+            def _format_history_item(item_id: Any) -> str:
+                row = item_records.loc[item_id]
+                item_name = str(row["item_name"])
+                location = row.get("location", "")
+                if pd.notna(location) and str(location).strip():
+                    return f"{item_name} — {location}"
+                return item_name
+
+            item_options = item_records.index.tolist()
+            target_id = st.selectbox(
+                "Select item",
+                item_options,
+                key="hist_select",
+                format_func=_format_history_item,
+            )
+            if target_id is not None:
+                sel_name = str(item_records.loc[target_id]["item_name"])
                 ev_list = ledger.get_item_history(target_id)
                 pdf = reporter.generate_item_history_pdf(ev_list, sel_name, df)
                 st.download_button(

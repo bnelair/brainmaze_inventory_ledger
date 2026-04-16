@@ -46,13 +46,15 @@ logger = logging.getLogger(__name__)
 
 # Git branch names: allow alphanumeric, hyphen, underscore, forward slash, dot
 _BRANCH_RE = re.compile(r"^[a-zA-Z0-9._/\-]{1,255}$")
-# Commit messages: printable ASCII + unicode letters/numbers, no shell metacharacters
-_SAFE_COMMIT_MSG_RE = re.compile(r"^[\w\s.,:/\-+#@!()\[\]]{1,500}$", re.UNICODE)
 
 
 def _safe_branch(branch: str) -> str:
     """Validate and return a safe git branch name, raising ValueError on bad input."""
     branch = branch.strip()
+    if branch.startswith("-"):
+        raise ValueError(
+            f"Invalid branch name {branch!r}: branch names must not start with a dash."
+        )
     if not _BRANCH_RE.match(branch):
         raise ValueError(
             f"Invalid branch name {branch!r}. "
@@ -164,7 +166,18 @@ class GitManager:
         """Run a subprocess command and return ``(returncode, stdout, stderr)``."""
         env = {**os.environ}
         if self.auth_method == "SSH":
-            env["GIT_SSH_COMMAND"] = "ssh -o StrictHostKeyChecking=no -o BatchMode=yes"
+            allow_insecure = os.environ.get("GIT_ALLOW_INSECURE_SSH", "").lower() in {
+                "1", "true", "yes", "on",
+            }
+            known_hosts = os.environ.get("GIT_SSH_KNOWN_HOSTS", "").strip()
+            ssh_cmd = ["ssh", "-o", "BatchMode=yes"]
+            if allow_insecure:
+                ssh_cmd.extend(["-o", "StrictHostKeyChecking=no"])
+            else:
+                ssh_cmd.extend(["-o", "StrictHostKeyChecking=accept-new"])
+                if known_hosts:
+                    ssh_cmd.extend(["-o", f"UserKnownHostsFile={known_hosts}"])
+            env["GIT_SSH_COMMAND"] = " ".join(ssh_cmd)
         if extra_env:
             env.update(extra_env)
 

@@ -15,12 +15,15 @@ ITEM_UPDATED   – updates any non-quantity metadata field
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
 from ulid import ULID
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Event type constants
@@ -74,7 +77,13 @@ class InventoryLedger:
                 if line:
                     try:
                         events.append(json.loads(line))
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as exc:
+                        logger.warning(
+                            "Skipping malformed event line in %s: %s — %r",
+                            self.events_file,
+                            exc,
+                            line[:120],
+                        )
                         continue
         return events
 
@@ -337,7 +346,14 @@ class InventoryLedger:
         list of event dicts
         """
         ts = self._now_iso()
+
+        if qty <= 0:
+            raise ValueError(f"Transfer qty must be > 0, got {qty!r}.")
+
         current_stock = self.get_current_stock()
+
+        if current_stock.empty or "item_id" not in current_stock.columns:
+            raise ValueError("Inventory is empty — no items available to transfer.")
 
         source_rows = current_stock[current_stock["item_id"] == source_item_id]
         if source_rows.empty:
@@ -346,6 +362,11 @@ class InventoryLedger:
         source = source_rows.iloc[0]
         source_name = str(source.get("item_name", ""))
         source_location = str(source.get("location", ""))
+        available = int(source.get("quantity", 0))
+        if qty > available:
+            raise ValueError(
+                f"Cannot transfer {qty} units of '{source_name}': only {available} available."
+            )
 
         events: List[Dict[str, Any]] = []
 

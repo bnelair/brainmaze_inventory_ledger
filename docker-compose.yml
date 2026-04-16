@@ -15,9 +15,10 @@ services:
       - DATA_DIR=/app/data
       - REPORTS_DIR=/app/reports
 
-      # Git authentication  ── PAT | SSH | APP
+      # Git authentication  ── PAT | SSH | APP | BASIC
       - GIT_AUTH_METHOD=${GIT_AUTH_METHOD:-PAT}
       - GIT_TOKEN=${GIT_TOKEN:-}
+      - GIT_USERNAME=${GIT_USERNAME:-}      # BASIC auth only (username for https://<user>:<token>@host)
       - GIT_REPO_URL=${GIT_REPO_URL:-}
       - GIT_BRANCH=${GIT_BRANCH:-main}
       - GIT_USER_NAME=${GIT_USER_NAME:-Brainmaze Bot}
@@ -25,6 +26,11 @@ services:
 
       # git-crypt (optional – only for encrypted private repositories)
       - GIT_CRYPT_KEY=${GIT_CRYPT_KEY:-}
+
+      # SSH host key verification (SSH auth only)
+      # GIT_ALLOW_INSECURE_SSH=true disables host key checking (not recommended for production)
+      - GIT_ALLOW_INSECURE_SSH=${GIT_ALLOW_INSECURE_SSH:-false}
+      - GIT_SSH_KNOWN_HOSTS=${GIT_SSH_KNOWN_HOSTS:-}
 
     # ── Volumes ──────────────────────────────────────────────────────────────
     volumes:
