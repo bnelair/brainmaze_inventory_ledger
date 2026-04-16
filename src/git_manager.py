@@ -1,17 +1,22 @@
 """
 Git Authentication and Synchronization Manager.
 
-Supports three authentication methods:
+Supports four authentication methods:
 
-PAT  – Personal Access Token embedded in an HTTPS URL
-       ``https://<token>@github.com/org/repo.git``
+PAT   – Personal Access Token embedded in an HTTPS URL
+        ``https://<token>@github.com/org/repo.git``
 
-SSH  – Key-based auth; requires ``/root/.ssh`` (or ``~/.ssh``) to be mounted
-       read-only in the container.
+SSH   – Key-based auth; requires ``/root/.ssh`` (or ``~/.ssh``) to be mounted
+        read-only in the container.
 
-APP  – GitHub / GitLab App / Bot account using an HTTPS token supplied via
-       environment variable (functionally identical to PAT but intended for
-       service accounts).
+APP   – GitHub / GitLab App / Bot account using an HTTPS token supplied via
+        environment variable (functionally identical to PAT but intended for
+        service accounts).
+
+BASIC – Username + password (or project/deploy token used as password).
+        Builds ``https://<username>:<password>@host/repo.git``.
+        This is the same mechanism used by Wiki.js and works with GitLab
+        service accounts without needing a Personal Access Token UI.
 
 git-crypt
 ---------
@@ -83,9 +88,13 @@ class GitManager:
     branch : str
         Branch name.  Falls back to ``GIT_BRANCH`` env var (default ``main``).
     auth_method : str, optional
-        ``"PAT"``, ``"SSH"``, or ``"APP"``.  Falls back to ``GIT_AUTH_METHOD``.
+        ``"PAT"``, ``"SSH"``, ``"APP"``, or ``"BASIC"``.
+        Falls back to ``GIT_AUTH_METHOD``.
     token : str, optional
-        PAT / App token.  Falls back to ``GIT_TOKEN`` env var.
+        PAT / App token, or password for BASIC auth.
+        Falls back to ``GIT_TOKEN`` env var.
+    username : str, optional
+        Username for BASIC auth.  Falls back to ``GIT_USERNAME`` env var.
     git_user_name : str
         Name used for git commits (``user.name``).
     git_user_email : str
@@ -99,6 +108,7 @@ class GitManager:
         branch: Optional[str] = None,
         auth_method: Optional[str] = None,
         token: Optional[str] = None,
+        username: Optional[str] = None,
         git_user_name: Optional[str] = None,
         git_user_email: Optional[str] = None,
     ) -> None:
@@ -107,6 +117,7 @@ class GitManager:
         self.branch = branch or os.environ.get("GIT_BRANCH", "main")
         self.auth_method = (auth_method or os.environ.get("GIT_AUTH_METHOD", "PAT")).upper()
         self.token = token or os.environ.get("GIT_TOKEN", "")
+        self.username = username or os.environ.get("GIT_USERNAME", "")
         self.git_user_name = git_user_name or os.environ.get("GIT_USER_NAME", "Brainmaze Bot")
         self.git_user_email = git_user_email or os.environ.get("GIT_USER_EMAIL", "brainmaze@lab.local")
         self._git_crypt_unlocked = False
@@ -148,7 +159,17 @@ class GitManager:
                 if parsed.port:
                     netloc += f":{parsed.port}"
                 return urlunparse(parsed._replace(netloc=netloc, scheme="https"))
-        # SSH or no token → return URL unchanged
+        if self.auth_method == "BASIC" and self.username and self.token:
+            from urllib.parse import quote as _quote
+            parsed = urlparse(self.repo_url)
+            if parsed.scheme in ("http", "https"):
+                user = _quote(self.username, safe="")
+                pwd  = _quote(self.token,    safe="")
+                netloc = f"{user}:{pwd}@{parsed.hostname}"
+                if parsed.port:
+                    netloc += f":{parsed.port}"
+                return urlunparse(parsed._replace(netloc=netloc, scheme="https"))
+        # SSH or no credentials → return URL unchanged
         return self.repo_url
 
     @staticmethod

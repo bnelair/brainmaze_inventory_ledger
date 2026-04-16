@@ -1163,29 +1163,38 @@ def page_git_sync() -> None:
         )
         c1, c2 = st.columns(2)
         with c1:
+            _auth_methods = ["PAT", "SSH", "APP", "BASIC"]
             cfg_auth = st.selectbox(
-                "Auth Method", ["PAT", "SSH", "APP"],
+                "Auth Method", _auth_methods,
                 index=(
-                    ["PAT", "SSH", "APP"].index(git.auth_method)
-                    if git.auth_method in ["PAT", "SSH", "APP"] else 0
+                    _auth_methods.index(git.auth_method)
+                    if git.auth_method in _auth_methods else 0
                 ),
             )
             cfg_branch = st.text_input("Branch", value=git.branch)
         with c2:
-            cfg_token = (
-                st.text_input("PAT Token", type="password")
-                if cfg_auth in ("PAT", "APP")
-                else ""
-            )
+            if cfg_auth == "BASIC":
+                cfg_username = st.text_input(
+                    "Username",
+                    value=git.username or os.environ.get("GIT_USERNAME", ""),
+                )
+                cfg_token = st.text_input("Password", type="password")
+            elif cfg_auth in ("PAT", "APP"):
+                cfg_username = ""
+                cfg_token = st.text_input("Token", type="password")
+            else:
+                cfg_username = ""
+                cfg_token = ""
             cfg_name  = st.text_input("Commit Author Name",  value=git.git_user_name)
             cfg_email = st.text_input("Commit Author Email", value=git.git_user_email)
 
         if st.button("💾 Apply Configuration"):
-            git.repo_url = cfg_repo
+            git.repo_url    = cfg_repo
             git.auth_method = cfg_auth
-            git.token = cfg_token or git.token
-            git.branch = cfg_branch
-            git.git_user_name = cfg_name
+            git.username    = cfg_username or git.username
+            git.token       = cfg_token or git.token
+            git.branch      = cfg_branch
+            git.git_user_name  = cfg_name
             git.git_user_email = cfg_email
             if not status["initialized"]:
                 ok, msg = git.init_repo()
