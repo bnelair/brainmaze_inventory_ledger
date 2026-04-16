@@ -983,7 +983,8 @@ def page_batch_change() -> None:
 
 def page_transfer_location() -> None:
     _page_header("📍", "Transfer Location",
-                 "Move an item from one storage location to another.")
+                 "Move quantities of items between storage locations. "
+                 "Add multiple rows to transfer several items at once.")
 
     researcher = _display_name()
     st.info(f"👤 Recording as: **{researcher}**")
@@ -995,69 +996,152 @@ def page_transfer_location() -> None:
         st.info("No items in inventory. Add items first using **➕ Add Item**.")
         return
 
-    item_names: Dict[str, str] = df.set_index("item_id")["item_name"].to_dict()
-    options = {f"{name}  (ID: {iid})": iid for iid, name in item_names.items()}
     loc_options = _location_options()
 
-    with st.form("transfer_location_form", clear_on_submit=True):
-        selected_label = st.selectbox("Select Item *", list(options.keys()))
-        item_id = options[selected_label]
+    # Build a label → item_id mapping; label shows name, location, and current qty
+    label_to_id: Dict[str, str] = {}
+    for _, row in df.iterrows():
+        lbl = f"{row['item_name']}  @  {row.get('location', '—')}  (qty: {row['quantity']})"
+        label_to_id[lbl] = str(row["item_id"])
+    item_labels = list(label_to_id.keys())
 
-        row_match = df[df["item_id"] == item_id]
-        current = row_match.iloc[0] if not row_match.empty else None
-
-        if current is not None:
-            mc1, mc2, mc3 = st.columns(3)
-            mc1.metric("Current Stock",
-                       f"{current['quantity']} {current.get('unit', 'pcs')}")
-            mc2.metric("Category", current.get("category", "—"))
-            mc3.metric("Current Location", current.get("location", "—"))
-
-        st.divider()
-
-        current_loc = current.get("location", "") if current is not None else ""
-        default_idx = loc_options.index(current_loc) if current_loc in loc_options else 0
-        new_location = st.selectbox(
-            "New Location *",
-            loc_options,
-            index=default_idx,
-            key="transfer_new_loc",
+    # Reference table for the user
+    with st.expander("📋 Current Stock Reference", expanded=False):
+        ref_cols = [c for c in ["category", "item_name", "quantity", "unit", "location"]
+                    if c in df.columns]
+        st.dataframe(
+            df[ref_cols].rename(columns={
+                "category": "Category", "item_name": "Item Name",
+                "quantity": "Qty", "unit": "Unit", "location": "Location",
+            }),
+            use_container_width=True,
+            hide_index=True,
         )
 
-        reason = st.text_input(
-            "Reason *",
-            placeholder="e.g., Reorganised storage, Moved to correct freezer",
-        )
-        submitted = st.form_submit_button(
-            "📍 Transfer Item", type="primary", use_container_width=True
-        )
+    st.markdown("**Add one row per item to transfer.** "
+                "Enter the quantity to move — the source record will be "
+                "decremented and the destination record created or incremented.")
 
-    if submitted:
+    transfer_col_config: Dict[str, Any] = {
+        "source_item":           st.column_config.SelectboxColumn(
+            "Source Item *", options=item_labels, required=True,
+            help="Item and its current location",
+        ),
+        "qty_to_transfer":       st.column_config.NumberColumn(
+            "Qty to Transfer *", min_value=1, default=1, required=True,
+        ),
+        "destination_location":  st.column_config.SelectboxColumn(
+            "Destination Location *", options=loc_options, required=True,
+        ),
+        "reason":                st.column_config.TextColumn(
+            "Row Reason (optional)",
+            help="Leave blank to use the batch reason below.",
+        ),
+    }
+
+    empty_transfer_df = pd.DataFrame(
+        [{"source_item": None, "qty_to_transfer": 1,
+          "destination_location": None, "reason": None}] * 2
+    )
+    edited = st.data_editor(
+        empty_transfer_df,
+        column_config=transfer_col_config,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="transfer_editor",
+    )
+
+    batch_reason = st.text_input(
+        "Batch Reason *",
+        placeholder="e.g., Reorganised storage, Moved to correct freezer",
+    )
+
+    if st.button("📍 Execute Transfer", type="primary", use_container_width=True):
+        valid_rows = [
+            r for r in edited.dropna(subset=["source_item", "destination_location"])
+                              .to_dict("records")
+            if r.get("source_item") and r.get("destination_location")
+        ]
+
         errors: List[str] = []
-        if not reason.strip():
-            errors.append("Reason is required.")
-        if current is not None and new_location == current.get("location", ""):
-            errors.append("The new location is the same as the current location.")
+        if not valid_rows:
+            errors.append("Enter at least one complete transfer row.")
+        if not batch_reason.strip():
+            errors.append("Batch reason is required.")
+
+        # Per-row validation
+        for i, row in enumerate(valid_rows, 1):
+            src_label = row["source_item"]
+            src_id = label_to_id.get(src_label)
+            if not src_id:
+                errors.append(f"Row {i}: unknown source item '{src_label}'.")
+                continue
+            src_row = df[df["item_id"] == src_id]
+            if src_row.empty:
+                errors.append(f"Row {i}: source item not found.")
+                continue
+            current_qty = int(src_row.iloc[0]["quantity"])
+            qty = int(row.get("qty_to_transfer") or 1)
+            if qty <= 0:
+                errors.append(f"Row {i}: quantity must be > 0.")
+            if qty > current_qty:
+                errors.append(
+                    f"Row {i}: cannot transfer {qty} — only {current_qty} available."
+                )
+            dest_loc = row["destination_location"]
+            src_loc = src_row.iloc[0].get("location", "")
+            if dest_loc == src_loc:
+                errors.append(
+                    f"Row {i}: destination location is the same as the source."
+                )
+
         for e in errors:
             st.error(e)
+
         if not errors:
-            old_loc = current.get("location", "—") if current is not None else "—"
-            event = ledger.update_item_metadata(
-                item_id=item_id,
+            transfers: List[Dict[str, Any]] = []
+            transfers_summary: List[Dict[str, Any]] = []
+            for row in valid_rows:
+                src_id = label_to_id[row["source_item"]]
+                src_row = df[df["item_id"] == src_id].iloc[0]
+                qty = int(row.get("qty_to_transfer") or 1)
+                dest_loc = row["destination_location"]
+                transfers.append({
+                    "source_item_id":       src_id,
+                    "qty":                  qty,
+                    "destination_location": dest_loc,
+                    "reason":               (row.get("reason") or "").strip() or None,
+                })
+                transfers_summary.append({
+                    "item_name":     src_row.get("item_name", ""),
+                    "category":      src_row.get("category", ""),
+                    "from_location": src_row.get("location", ""),
+                    "to_location":   dest_loc,
+                    "qty":           qty,
+                })
+
+            all_events = ledger.batch_transfer(
+                transfers=transfers,
                 researcher=researcher,
-                reason=reason.strip(),
-                location=new_location,
+                batch_reason=batch_reason.strip(),
             )
-            name = item_names.get(item_id, "item")
+
+            batch_id = all_events[0]["payload"].get("batch_id", "—") if all_events else "—"
             st.success(
-                f"✅ **{name}** transferred from **{old_loc}** → **{new_location}**."
+                f"✅ **{len(transfers)}** transfer(s) recorded "
+                f"({len(all_events)} events, batch `{batch_id}`)."
             )
-            st.code(f"Transaction ID : {event['id']}")
-            pdf_bytes = _reporter().generate_change_slip(event, name)
+
+            pdf_bytes = _reporter().generate_transfer_slip(
+                transfers_summary=transfers_summary,
+                batch_id=batch_id,
+                batch_reason=batch_reason.strip(),
+                researcher=researcher,
+            )
             st.download_button(
                 "🖨️ Download Transfer Slip (PDF)",
                 data=pdf_bytes,
-                file_name=f"transfer_slip_{event['id']}.pdf",
+                file_name=f"transfer_slip_{batch_id}.pdf",
                 mime="application/pdf",
             )
 

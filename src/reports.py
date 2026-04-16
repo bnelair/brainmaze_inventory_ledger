@@ -503,3 +503,121 @@ class ReportGenerator:
             align="C",
         )
         return bytes(pdf.output())
+
+    # ------------------------------------------------------------------
+    # 5. Batch transfer slip
+    # ------------------------------------------------------------------
+
+    def generate_transfer_slip(
+        self,
+        transfers_summary: List[Dict[str, Any]],
+        batch_id: str,
+        batch_reason: str,
+        researcher: str,
+    ) -> bytes:
+        """
+        Generate a PDF slip for a batch partial-quantity location transfer.
+
+        Parameters
+        ----------
+        transfers_summary : list of dict
+            Each dict: ``item_name``, ``category``, ``from_location``,
+            ``to_location``, ``qty``.
+        batch_id : str
+        batch_reason : str
+        researcher : str
+        """
+        pdf = _LabPDF(project_name=self.project_name)
+        pdf.alias_nb_pages()
+        pdf.add_page()
+
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 12, "Batch Transfer Slip", align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(
+            0, 6,
+            f"Batch ID: {batch_id}  |  "
+            f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            align="C", new_x="LMARGIN", new_y="NEXT",
+        )
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(4)
+
+        lbl_w, val_w, row_h = 55.0, 115.0, 9.0
+
+        def _field(label: str, value: str) -> None:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_fill_color(235, 242, 255)
+            pdf.cell(lbl_w, row_h, label + ":", border=1, fill=True)
+            pdf.set_font("Helvetica", "", 10)
+            pdf.cell(val_w, row_h, str(value), border=1, new_x="LMARGIN", new_y="NEXT")
+
+        _field("Researcher", researcher)
+        _field("Batch Reason", batch_reason)
+        _field("Transfers in Batch", str(len(transfers_summary)))
+        pdf.ln(6)
+
+        col_defs_t = [
+            ("Category",      30),
+            ("Item Name",     55),
+            ("From Location", 40),
+            ("To Location",   40),
+            ("Qty Moved",     20),
+        ]
+        page_w = pdf.w - pdf.l_margin - pdf.r_margin
+        total_w = sum(w for _, w in col_defs_t)
+        scale = page_w / total_w if total_w > 0 else 1.0
+        scaled = [(lbl, round(w * scale, 1)) for lbl, w in col_defs_t]
+
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_fill_color(200, 220, 255)
+        for lbl, w in scaled:
+            pdf.cell(w, row_h, lbl, border=1, align="C", fill=True)
+        pdf.ln()
+
+        pdf.set_font("Helvetica", "", 8)
+        for i, t in enumerate(transfers_summary):
+            fill = i % 2 == 0
+            pdf.set_fill_color(245, 248, 255 if fill else 255)
+            row_vals = [
+                (str(t.get("category", "")),      scaled[0][1]),
+                (str(t.get("item_name", "")),      scaled[1][1]),
+                (str(t.get("from_location", "")), scaled[2][1]),
+                (str(t.get("to_location", "")),   scaled[3][1]),
+                (str(t.get("qty", "")),            scaled[4][1]),
+            ]
+            for val, w in row_vals:
+                pdf.cell(w, row_h, str(val), border=1, fill=fill)
+            pdf.ln()
+
+        pdf.ln(12)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_fill_color(210, 225, 255)
+        pdf.cell(
+            0, 10, "Authorization & Signatures", border=1, fill=True,
+            align="C", new_x="LMARGIN", new_y="NEXT",
+        )
+        pdf.ln(4)
+
+        sig_w = (pdf.w - pdf.l_margin - pdf.r_margin - 10) / 2
+        pdf.cell(sig_w, 22, "", border=1)
+        pdf.cell(10, 22, "")
+        pdf.cell(sig_w, 22, "", border=1, new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.cell(sig_w, 6, "Researcher Signature / Date", align="C")
+        pdf.cell(10, 6, "")
+        pdf.cell(sig_w, 6, "Supervisor Signature / Date", align="C",
+                 new_x="LMARGIN", new_y="NEXT")
+
+        pdf.ln(8)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(128, 128, 128)
+        pdf.cell(
+            0, 6,
+            "This document is an official Brainmaze Inventory transfer record. "
+            "Please sign and retain for physical filing.",
+            align="C",
+        )
+        return bytes(pdf.output())

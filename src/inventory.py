@@ -304,11 +304,158 @@ class InventoryLedger:
 
         return events
 
-    # ------------------------------------------------------------------
-    # Public read API
-    # ------------------------------------------------------------------
+    def transfer_quantity(
+        self,
+        source_item_id: str,
+        qty: int,
+        destination_location: str,
+        researcher: str,
+        reason: str,
+        batch_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Transfer ``qty`` units of an item to a different storage location.
 
-    def get_event_history(self) -> List[Dict[str, Any]]:
+        If an item with the same name already exists at the destination
+        location, its stock is incremented via ``STOCK_CHANGED``.  Otherwise
+        a new item record is created there (``ITEM_CREATED``) copying all
+        metadata from the source item.
+
+        Parameters
+        ----------
+        source_item_id : str
+        qty : int
+            Number of units to move (must be > 0).
+        destination_location : str
+        researcher : str
+        reason : str
+        batch_id : str, optional
+            Shared batch identifier to group transfer events.
+
+        Returns
+        -------
+        list of event dicts
+        """
+        ts = self._now_iso()
+        current_stock = self.get_current_stock()
+
+        source_rows = current_stock[current_stock["item_id"] == source_item_id]
+        if source_rows.empty:
+            raise ValueError(f"Source item '{source_item_id}' not found.")
+
+        source = source_rows.iloc[0]
+        source_name = str(source.get("item_name", ""))
+        source_location = str(source.get("location", ""))
+
+        events: List[Dict[str, Any]] = []
+
+        # 1. Deduct from source
+        deduct_payload: Dict[str, Any] = {
+            "qty_delta": -int(qty),
+            "researcher": researcher,
+            "reason": reason,
+            "transfer_to": destination_location,
+        }
+        if batch_id:
+            deduct_payload["batch_id"] = batch_id
+        deduct_event: Dict[str, Any] = {
+            "id": self._new_ulid(),
+            "item_id": source_item_id,
+            "timestamp": ts,
+            "type": EVENT_STOCK_CHANGED,
+            "payload": deduct_payload,
+        }
+        self._append_event(deduct_event)
+        events.append(deduct_event)
+
+        # 2. Find existing destination item or create a new one
+        dest_rows = current_stock[
+            (current_stock["item_name"] == source_name)
+            & (current_stock["location"] == destination_location)
+        ]
+
+        if not dest_rows.empty:
+            dest_item_id = str(dest_rows.iloc[0]["item_id"])
+            add_payload: Dict[str, Any] = {
+                "qty_delta": int(qty),
+                "researcher": researcher,
+                "reason": reason,
+                "transfer_from": source_location,
+            }
+            if batch_id:
+                add_payload["batch_id"] = batch_id
+            add_event: Dict[str, Any] = {
+                "id": self._new_ulid(),
+                "item_id": dest_item_id,
+                "timestamp": ts,
+                "type": EVENT_STOCK_CHANGED,
+                "payload": add_payload,
+            }
+            self._append_event(add_event)
+            events.append(add_event)
+        else:
+            new_item_id = self._new_ulid()
+            create_payload: Dict[str, Any] = {
+                "item_name": source_name,
+                "quantity": int(qty),
+                "researcher": researcher,
+                "reason": reason,
+                "location": destination_location,
+                "transfer_from": source_location,
+            }
+            if batch_id:
+                create_payload["batch_id"] = batch_id
+            for field in ("unit", "category", "supplier", "item_id_label", "notes"):
+                val = source.get(field, "")
+                if val:
+                    create_payload[field] = val
+            create_event: Dict[str, Any] = {
+                "id": self._new_ulid(),
+                "item_id": new_item_id,
+                "timestamp": ts,
+                "type": EVENT_ITEM_CREATED,
+                "payload": create_payload,
+            }
+            self._append_event(create_event)
+            events.append(create_event)
+
+        return events
+
+    def batch_transfer(
+        self,
+        transfers: List[Dict[str, Any]],
+        researcher: str,
+        batch_reason: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Transfer multiple item quantities to different locations in one operation.
+
+        Parameters
+        ----------
+        transfers : list of dict
+            Each dict must have ``source_item_id`` (str), ``qty`` (int), and
+            ``destination_location`` (str).  An optional ``reason`` key
+            overrides ``batch_reason`` for that row.
+        researcher : str
+        batch_reason : str
+
+        Returns
+        -------
+        list of all event dicts generated
+        """
+        batch_id = self._new_ulid()
+        all_events: List[Dict[str, Any]] = []
+        for t in transfers:
+            row_events = self.transfer_quantity(
+                source_item_id=t["source_item_id"],
+                qty=int(t["qty"]),
+                destination_location=t["destination_location"],
+                researcher=researcher,
+                reason=str(t.get("reason") or batch_reason),
+                batch_id=batch_id,
+            )
+            all_events.extend(row_events)
+        return all_events
         """Return all events in chronological order."""
         return self._load_events()
 
