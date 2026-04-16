@@ -304,6 +304,12 @@ class InventoryLedger:
             events.append(event)
 
         return events
+
+    # ------------------------------------------------------------------
+    # Public read API
+    # ------------------------------------------------------------------
+
+    def get_event_history(self) -> List[Dict[str, Any]]:
         """Return all events in chronological order."""
         return self._load_events()
 

@@ -64,6 +64,12 @@ def _safe_commit_msg(msg: str) -> str:
     return msg[:500] if msg else "Inventory update"
 
 
+def _safe_git_config_value(value: str, max_len: int = 100) -> str:
+    """Strip control characters and NUL from a git config string value."""
+    value = re.sub(r"[\x00-\x1f\x7f]", "", value.strip())
+    return value[:max_len] if value else "Brainmaze"
+
+
 class GitManager:
     """
     Manages Git repository operations for inventory-data synchronisation.
@@ -204,8 +210,8 @@ class GitManager:
         if code != 0:
             return False, f"git init failed: {err}"
 
-        self._run(["git", "config", "user.name", self.git_user_name])
-        self._run(["git", "config", "user.email", self.git_user_email])
+        self._run(["git", "config", "user.name",  _safe_git_config_value(self.git_user_name)])
+        self._run(["git", "config", "user.email", _safe_git_config_value(self.git_user_email)])
         self._ensure_gitignore()
         return True, f"Repository initialised at {self.data_dir}"
 
@@ -238,8 +244,8 @@ class GitManager:
                 return False, msg
 
         self._ensure_gitignore()
-        self._run(["git", "config", "user.name", self.git_user_name])
-        self._run(["git", "config", "user.email", self.git_user_email])
+        self._run(["git", "config", "user.name",  _safe_git_config_value(self.git_user_name)])
+        self._run(["git", "config", "user.email", _safe_git_config_value(self.git_user_email)])
         self._run(["git", "add", "."])
 
         commit_msg = _safe_commit_msg(message or f"Inventory update {self._utc_now()}")
