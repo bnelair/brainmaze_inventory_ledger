@@ -77,6 +77,7 @@ def _safe_git_config_value(value: str, max_len: int = 100) -> str:
     return value[:max_len] if value else "Brainmaze"
 
 
+_TRUTHY_ENV = frozenset({"1", "true", "yes", "on"})
 _SAFE_URL_SCHEMES = frozenset({"https", "http", "git", "ssh"})
 
 
@@ -166,9 +167,7 @@ class GitManager:
         """Run a subprocess command and return ``(returncode, stdout, stderr)``."""
         env = {**os.environ}
         if self.auth_method == "SSH":
-            allow_insecure = os.environ.get("GIT_ALLOW_INSECURE_SSH", "").lower() in {
-                "1", "true", "yes", "on",
-            }
+            allow_insecure = os.environ.get("GIT_ALLOW_INSECURE_SSH", "").lower() in _TRUTHY_ENV
             known_hosts = os.environ.get("GIT_SSH_KNOWN_HOSTS", "").strip()
             ssh_cmd = ["ssh", "-o", "BatchMode=yes"]
             if allow_insecure:

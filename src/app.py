@@ -1306,7 +1306,7 @@ def page_reports() -> None:
                 key="hist_select",
                 format_func=_format_history_item,
             )
-            if target_id is not None:
+            if target_id is not None and str(target_id).strip():
                 sel_name = str(item_records.loc[target_id]["item_name"])
                 ev_list = ledger.get_item_history(target_id)
                 pdf = reporter.generate_item_history_pdf(ev_list, sel_name, df)

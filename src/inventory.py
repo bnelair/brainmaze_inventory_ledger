@@ -352,8 +352,12 @@ class InventoryLedger:
 
         current_stock = self.get_current_stock()
 
-        if current_stock.empty or "item_id" not in current_stock.columns:
+        if current_stock.empty:
             raise ValueError("Inventory is empty — no items available to transfer.")
+        if "item_id" not in current_stock.columns:
+            raise ValueError(
+                "Inventory data is missing the 'item_id' column; the event log may be corrupt."
+            )
 
         source_rows = current_stock[current_stock["item_id"] == source_item_id]
         if source_rows.empty:
