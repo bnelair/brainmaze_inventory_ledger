@@ -384,10 +384,11 @@ _NAV_ALL = [
     ("🖨️ Print Reports",  "reports"),
 ]
 _NAV_RW = [
-    ("➕ Add Item",       "add_item"),
-    ("📦 Batch Add",      "batch_add"),
-    ("🔄 Record Change",  "record_change"),
-    ("📦 Batch Change",   "batch_change"),
+    ("➕ Add Item",           "add_item"),
+    ("📦 Batch Add",          "batch_add"),
+    ("🔄 Record Change",      "record_change"),
+    ("📦 Batch Change",       "batch_change"),
+    ("📍 Transfer Location",  "transfer_location"),
 ]
 _NAV_ADMIN = [
     ("☁️ Git Sync",        "git_sync"),
@@ -496,7 +497,7 @@ def page_stock() -> None:
 
     st.divider()
 
-    fc1, fc2, fc3 = st.columns([2, 1, 1])
+    fc1, fc2, fc3, fc4 = st.columns([2, 1, 1, 1])
     with fc1:
         search = st.text_input("🔍 Search", placeholder="Filter by any field…")
     with fc2:
@@ -507,6 +508,13 @@ def page_stock() -> None:
         )
         cat_filter = st.selectbox("Category", cat_opts)
     with fc3:
+        loc_opts = ["All"] + (
+            sorted(df["location"].dropna().replace("", pd.NA).dropna().unique().tolist())
+            if "location" in df.columns
+            else []
+        )
+        loc_filter = st.selectbox("Location", loc_opts)
+    with fc4:
         low_only = st.checkbox("Low Stock Only")
 
     filtered = df.copy()
@@ -517,6 +525,8 @@ def page_stock() -> None:
         filtered = filtered[mask]
     if cat_filter != "All" and "category" in filtered.columns:
         filtered = filtered[filtered["category"] == cat_filter]
+    if loc_filter != "All" and "location" in filtered.columns:
+        filtered = filtered[filtered["location"] == loc_filter]
     if low_only and "min_stock_level" in filtered.columns:
         filtered = filtered[
             (filtered["min_stock_level"] > 0)
@@ -966,6 +976,92 @@ def page_batch_change() -> None:
             )
 
 
+
+# ===========================================================================
+# PAGE: Transfer Location
+# ===========================================================================
+
+def page_transfer_location() -> None:
+    _page_header("📍", "Transfer Location",
+                 "Move an item from one storage location to another.")
+
+    researcher = _display_name()
+    st.info(f"👤 Recording as: **{researcher}**")
+
+    ledger = _current_ledger()
+    df = ledger.get_current_stock()
+
+    if df.empty:
+        st.info("No items in inventory. Add items first using **➕ Add Item**.")
+        return
+
+    item_names: Dict[str, str] = df.set_index("item_id")["item_name"].to_dict()
+    options = {f"{name}  (ID: {iid})": iid for iid, name in item_names.items()}
+    loc_options = _location_options()
+
+    with st.form("transfer_location_form", clear_on_submit=True):
+        selected_label = st.selectbox("Select Item *", list(options.keys()))
+        item_id = options[selected_label]
+
+        row_match = df[df["item_id"] == item_id]
+        current = row_match.iloc[0] if not row_match.empty else None
+
+        if current is not None:
+            mc1, mc2, mc3 = st.columns(3)
+            mc1.metric("Current Stock",
+                       f"{current['quantity']} {current.get('unit', 'pcs')}")
+            mc2.metric("Category", current.get("category", "—"))
+            mc3.metric("Current Location", current.get("location", "—"))
+
+        st.divider()
+
+        current_loc = current.get("location", "") if current is not None else ""
+        default_idx = loc_options.index(current_loc) if current_loc in loc_options else 0
+        new_location = st.selectbox(
+            "New Location *",
+            loc_options,
+            index=default_idx,
+            key="transfer_new_loc",
+        )
+
+        reason = st.text_input(
+            "Reason *",
+            placeholder="e.g., Reorganised storage, Moved to correct freezer",
+        )
+        submitted = st.form_submit_button(
+            "📍 Transfer Item", type="primary", use_container_width=True
+        )
+
+    if submitted:
+        errors: List[str] = []
+        if not reason.strip():
+            errors.append("Reason is required.")
+        if current is not None and new_location == current.get("location", ""):
+            errors.append("The new location is the same as the current location.")
+        for e in errors:
+            st.error(e)
+        if not errors:
+            old_loc = current.get("location", "—") if current is not None else "—"
+            event = ledger.update_item_metadata(
+                item_id=item_id,
+                researcher=researcher,
+                reason=reason.strip(),
+                location=new_location,
+            )
+            name = item_names.get(item_id, "item")
+            st.success(
+                f"✅ **{name}** transferred from **{old_loc}** → **{new_location}**."
+            )
+            st.code(f"Transaction ID : {event['id']}")
+            pdf_bytes = _reporter().generate_change_slip(event, name)
+            st.download_button(
+                "🖨️ Download Transfer Slip (PDF)",
+                data=pdf_bytes,
+                file_name=f"transfer_slip_{event['id']}.pdf",
+                mime="application/pdf",
+            )
+
+
 # ===========================================================================
 # PAGE: Event History
 # ===========================================================================
@@ -1060,6 +1156,18 @@ def page_reports() -> None:
     ledger = _current_ledger()
     df = ledger.get_current_stock()
     reporter = _reporter()
+
+    # ---- Location filter (applies to all report types) ------------------
+    if not df.empty and "location" in df.columns:
+        loc_vals = sorted(df["location"].dropna().replace("", pd.NA).dropna().unique().tolist())
+        if loc_vals:
+            rpt_loc = st.selectbox(
+                "📍 Filter by Location",
+                ["All Locations"] + loc_vals,
+                key="rpt_loc_filter",
+            )
+            if rpt_loc != "All Locations":
+                df = df[df["location"] == rpt_loc]
 
     col1, col2 = st.columns(2)
 
@@ -1553,21 +1661,22 @@ def main() -> None:
     page_key = _render_sidebar()
 
     pages = {
-        "stock":            page_stock,
-        "add_item":         page_add_item,
-        "batch_add":        page_batch_add,
-        "record_change":    page_record_change,
-        "batch_change":     page_batch_change,
-        "history":          page_history,
-        "reports":          page_reports,
-        "git_sync":         page_git_sync,
-        "project_settings": page_project_settings,
-        "projects":         page_projects,
-        "users":            page_users,
+        "stock":               page_stock,
+        "add_item":            page_add_item,
+        "batch_add":           page_batch_add,
+        "record_change":       page_record_change,
+        "batch_change":        page_batch_change,
+        "transfer_location":   page_transfer_location,
+        "history":             page_history,
+        "reports":             page_reports,
+        "git_sync":            page_git_sync,
+        "project_settings":    page_project_settings,
+        "projects":            page_projects,
+        "users":               page_users,
     }
 
     role = _role()
-    write_pages  = {"add_item", "batch_add", "record_change", "batch_change"}
+    write_pages  = {"add_item", "batch_add", "record_change", "batch_change", "transfer_location"}
     admin_pages  = {"git_sync", "project_settings", "projects", "users"}
 
     if page_key in write_pages and not AuthManager.can_write(role):
