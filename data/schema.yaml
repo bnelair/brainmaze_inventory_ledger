@@ -9,3 +9,12 @@ category_options:
   - Safety
   - Administrative
   - Other
+location_options:
+  - "Freezer -20°C"
+  - "Freezer -80°C"
+  - "Fridge 4°C"
+  - Room Temperature
+  - Shelf A
+  - Shelf B
+  - Cabinet
+  - Other

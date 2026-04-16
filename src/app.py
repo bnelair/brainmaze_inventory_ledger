@@ -193,6 +193,10 @@ def _category_options() -> List[str]:
     return _schema().get("category_options", ["Other"])
 
 
+def _location_options() -> List[str]:
+    return _schema().get("location_options", ["Other"])
+
+
 def _custom_fields() -> List[Dict[str, Any]]:
     return _schema().get("custom_fields", [])
 
@@ -582,7 +586,7 @@ def page_add_item() -> None:
 
         col3, col4 = st.columns(2)
         with col3:
-            location = st.text_input("Storage Location", placeholder="e.g., Freezer-1, Shelf-A")
+            location = st.selectbox("Storage Location", _location_options())
             supplier = st.text_input("Supplier", placeholder="e.g., Sigma-Aldrich")
         with col4:
             item_id_label = st.text_input("ID",
@@ -659,7 +663,8 @@ def page_batch_add() -> None:
         "unit":      st.column_config.TextColumn("Unit", default="pcs"),
         "category":  st.column_config.SelectboxColumn("Category",
                                                        options=_category_options()),
-        "location":  st.column_config.TextColumn("Location"),
+        "location":  st.column_config.SelectboxColumn("Location",
+                                                        options=_location_options()),
         "supplier":  st.column_config.TextColumn("Supplier"),
         "item_id_label": st.column_config.TextColumn("ID"),
         "notes":     st.column_config.TextColumn("Notes"),
@@ -1247,13 +1252,21 @@ def page_project_settings() -> None:
             value="\n".join(schema.get("category_options", [])),
             height=180,
         )
+        st.subheader("Storage Location Options")
+        locs_text = st.text_area(
+            "Locations (one per line)",
+            value="\n".join(schema.get("location_options", [])),
+            height=180,
+        )
         saved = st.form_submit_button("💾 Save", type="primary")
 
     if saved:
         new_cats = [c.strip() for c in cats_text.splitlines() if c.strip()]
-        schema["project_name"]    = new_name.strip() or schema.get("project_name", "")
-        schema["description"]     = new_desc.strip()
+        new_locs = [l.strip() for l in locs_text.splitlines() if l.strip()]
+        schema["project_name"]     = new_name.strip() or schema.get("project_name", "")
+        schema["description"]      = new_desc.strip()
         schema["category_options"] = new_cats
+        schema["location_options"] = new_locs
         pm.save_schema(project_id, schema)
         if new_name.strip():
             pm.rename_project(project_id, new_name.strip())

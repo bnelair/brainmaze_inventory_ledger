@@ -39,6 +39,16 @@ _DEFAULT_SCHEMA: Dict[str, Any] = {
         "Administrative",
         "Other",
     ],
+    "location_options": [
+        "Freezer -20°C",
+        "Freezer -80°C",
+        "Fridge 4°C",
+        "Room Temperature",
+        "Shelf A",
+        "Shelf B",
+        "Cabinet",
+        "Other",
+    ],
     # custom_fields is a list of dicts:
     # {name, label, type: text|number|select|checkbox, required, default, options}
     "custom_fields": [],
