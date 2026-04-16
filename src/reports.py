@@ -57,10 +57,10 @@ class ReportGenerator:
 
     # Column display configuration for the stock table
     _STOCK_COLS = [
+        ("category",        "Category",     28),
         ("item_name",       "Item Name",    55),
         ("quantity",        "Qty",          15),
         ("unit",            "Unit",         15),
-        ("category",        "Category",     28),
         ("location",        "Location",     33),
         ("supplier",        "Supplier",     38),
         ("item_id_label",   "ID",           33),
@@ -426,8 +426,8 @@ class ReportGenerator:
 
         if first_type == "ITEM_CREATED":
             col_defs_batch = [
-                ("Item Name", 65), ("Qty", 18), ("Unit", 18),
-                ("Category", 35), ("Location", 40), ("Reason", 44),
+                ("Category", 35), ("Item Name", 65), ("Qty", 18), ("Unit", 18),
+                ("Location", 40), ("Reason", 44),
             ]
         else:
             col_defs_batch = [("Item Name", 80), ("Qty Change", 22), ("Reason", 78)]
@@ -451,10 +451,10 @@ class ReportGenerator:
 
             if first_type == "ITEM_CREATED":
                 row_vals = [
-                    (payload.get("item_name", ""),       scaled[0][1]),
-                    (str(payload.get("quantity", 0)),    scaled[1][1]),
-                    (str(payload.get("unit", "")),       scaled[2][1]),
-                    (str(payload.get("category", "")),   scaled[3][1]),
+                    (str(payload.get("category", "")),   scaled[0][1]),
+                    (payload.get("item_name", ""),       scaled[1][1]),
+                    (str(payload.get("quantity", 0)),    scaled[2][1]),
+                    (str(payload.get("unit", "")),       scaled[3][1]),
                     (str(payload.get("location", "")),   scaled[4][1]),
                     ((payload.get("reason", "") or "")[:40], scaled[5][1]),
                 ]

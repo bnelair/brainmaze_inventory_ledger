@@ -534,7 +534,7 @@ def page_stock() -> None:
         ]
 
     core_order = [
-        "item_name", "quantity", "unit", "category", "location",
+        "category", "item_name", "quantity", "unit", "location",
         "min_stock_level", "supplier", "item_id_label", "last_updated",
     ]
     custom_names = [
