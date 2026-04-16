@@ -74,7 +74,11 @@ class ReportGenerator:
     # 1. Stock sheet
     # ------------------------------------------------------------------
 
-    def generate_stock_pdf(self, df: pd.DataFrame) -> bytes:
+    def generate_stock_pdf(
+        self,
+        df: pd.DataFrame,
+        custom_fields: Optional[List[Dict[str, Any]]] = None,
+    ) -> bytes:
         """
         Create a landscape A4 stock-level table.
 
@@ -109,7 +113,18 @@ class ReportGenerator:
             return bytes(pdf.output())
 
         # ---- determine which columns are present ----------------------
-        available = [(col, label, width) for col, label, width in self._STOCK_COLS if col in df.columns]
+        # Start with the fixed core columns, then append custom columns
+        extra_cols = []
+        if custom_fields:
+            for cf in custom_fields:
+                cname = cf.get("name", "")
+                clabel = cf.get("label", cname)
+                if cname and cname in df.columns:
+                    extra_cols.append((cname, clabel, 28))
+
+        all_stock_cols = list(self._STOCK_COLS) + extra_cols
+        available = [(col, label, width) for col, label, width in all_stock_cols
+                     if col in df.columns]
 
         # Scale widths proportionally to fill the printable area
         page_w = pdf.w - pdf.l_margin - pdf.r_margin
@@ -362,4 +377,152 @@ class ReportGenerator:
                 pdf.cell(width, row_h, str(val), border=1, fill=fill)
             pdf.ln()
 
+        return bytes(pdf.output())
+
+    # ------------------------------------------------------------------
+    # 4. Batch operation slip
+    # ------------------------------------------------------------------
+
+    def generate_batch_slip(
+        self,
+        events: List[Dict[str, Any]],
+        batch_reason: str,
+        researcher: str,
+        item_names: Optional[Dict[str, str]] = None,
+    ) -> bytes:
+        """
+        Generate a summary PDF for a batch add or batch stock-change operation.
+
+        Parameters
+        ----------
+        events : list of event dicts (all should share the same batch_id)
+        batch_reason : str
+        researcher : str
+        item_names : dict, optional
+            Mapping of item_id → item_name (needed for STOCK_CHANGED events).
+        """
+        if not events:
+            pdf = _LabPDF(project_name=self.project_name)
+            pdf.add_page()
+            pdf.set_font("Helvetica", "I", 12)
+            pdf.cell(0, 10, "No events in this batch.", align="C")
+            return bytes(pdf.output())
+
+        batch_id = events[0].get("payload", {}).get("batch_id", "—")
+        first_type = events[0].get("type", "")
+        title = (
+            "Batch Add Confirmation"
+            if first_type == "ITEM_CREATED"
+            else "Batch Stock Change Confirmation"
+        )
+
+        pdf = _LabPDF(project_name=self.project_name)
+        pdf.alias_nb_pages()
+        pdf.add_page()
+
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.cell(0, 12, title, align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(
+            0, 6,
+            f"Batch ID: {batch_id}  |  "
+            f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            align="C", new_x="LMARGIN", new_y="NEXT",
+        )
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(4)
+
+        lbl_w, val_w, row_h = 55.0, 115.0, 9.0
+
+        def _field(label: str, value: str) -> None:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_fill_color(235, 242, 255)
+            pdf.cell(lbl_w, row_h, label + ":", border=1, fill=True)
+            pdf.set_font("Helvetica", "", 10)
+            pdf.cell(val_w, row_h, str(value), border=1, new_x="LMARGIN", new_y="NEXT")
+
+        _field("Researcher",       researcher)
+        _field("Batch Reason",     batch_reason)
+        _field("Items in Batch",   str(len(events)))
+        pdf.ln(6)
+
+        if first_type == "ITEM_CREATED":
+            col_defs_batch = [
+                ("Item Name", 65), ("Qty", 18), ("Unit", 18),
+                ("Category", 35), ("Location", 40), ("Reason", 44),
+            ]
+        else:
+            col_defs_batch = [("Item Name", 80), ("Qty Change", 22), ("Reason", 78)]
+
+        page_w = pdf.w - pdf.l_margin - pdf.r_margin
+        total_w = sum(w for _, w in col_defs_batch)
+        scale = page_w / total_w if total_w > 0 else 1.0
+        scaled = [(lbl, round(w * scale, 1)) for lbl, w in col_defs_batch]
+
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_fill_color(200, 220, 255)
+        for lbl, w in scaled:
+            pdf.cell(w, row_h, lbl, border=1, align="C", fill=True)
+        pdf.ln()
+
+        pdf.set_font("Helvetica", "", 8)
+        for i, ev in enumerate(events):
+            payload = ev.get("payload", {})
+            fill = i % 2 == 0
+            pdf.set_fill_color(245, 248, 255 if fill else 255)
+
+            if first_type == "ITEM_CREATED":
+                row_vals = [
+                    (payload.get("item_name", ""),       scaled[0][1]),
+                    (str(payload.get("quantity", 0)),    scaled[1][1]),
+                    (str(payload.get("unit", "")),       scaled[2][1]),
+                    (str(payload.get("category", "")),   scaled[3][1]),
+                    (str(payload.get("location", "")),   scaled[4][1]),
+                    ((payload.get("reason", "") or "")[:40], scaled[5][1]),
+                ]
+            else:
+                iid = ev.get("item_id", "")
+                name = (item_names or {}).get(iid, iid)
+                delta_v = int(payload.get("qty_delta", 0))
+                sign = "+" if delta_v >= 0 else ""
+                row_vals = [
+                    (name,                               scaled[0][1]),
+                    (f"{sign}{delta_v}",                 scaled[1][1]),
+                    ((payload.get("reason", "") or "")[:60], scaled[2][1]),
+                ]
+
+            for val, w in row_vals:
+                pdf.cell(w, row_h, str(val), border=1, fill=fill)
+            pdf.ln()
+
+        pdf.ln(12)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_fill_color(210, 225, 255)
+        pdf.cell(
+            0, 10, "Authorization & Signatures", border=1, fill=True,
+            align="C", new_x="LMARGIN", new_y="NEXT",
+        )
+        pdf.ln(4)
+
+        sig_w = (pdf.w - pdf.l_margin - pdf.r_margin - 10) / 2
+        pdf.cell(sig_w, 22, "", border=1)
+        pdf.cell(10, 22, "")
+        pdf.cell(sig_w, 22, "", border=1, new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.cell(sig_w, 6, "Researcher Signature / Date", align="C")
+        pdf.cell(10, 6, "")
+        pdf.cell(sig_w, 6, "Supervisor Signature / Date", align="C",
+                 new_x="LMARGIN", new_y="NEXT")
+
+        pdf.ln(8)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(128, 128, 128)
+        pdf.cell(
+            0, 6,
+            "This document is an official Brainmaze Inventory batch record. "
+            "Please sign and retain for physical filing.",
+            align="C",
+        )
         return bytes(pdf.output())

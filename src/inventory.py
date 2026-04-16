@@ -205,7 +205,105 @@ class InventoryLedger:
 
         return pd.DataFrame(list(items.values()))
 
-    def get_event_history(self) -> List[Dict[str, Any]]:
+    def record_batch_changes(
+        self,
+        changes: List[Dict[str, Any]],
+        researcher: str,
+        batch_reason: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Record multiple stock changes belonging to the same batch/order.
+
+        Parameters
+        ----------
+        changes : list of dict
+            Each dict must have ``item_id`` (str) and ``qty_delta`` (int).
+            An optional per-item ``reason`` key overrides ``batch_reason``.
+        researcher : str
+            Display name of the logged-in user performing the batch.
+        batch_reason : str
+            Shared reason / order reference for the whole batch.
+
+        Returns
+        -------
+        list of event dicts
+        """
+        batch_id = self._new_ulid()
+        events: List[Dict[str, Any]] = []
+        ts = self._now_iso()
+
+        for change in changes:
+            event: Dict[str, Any] = {
+                "id":        self._new_ulid(),
+                "item_id":   change["item_id"],
+                "timestamp": ts,
+                "type":      EVENT_STOCK_CHANGED,
+                "payload": {
+                    "qty_delta":    int(change["qty_delta"]),
+                    "researcher":   researcher,
+                    "reason":       change.get("reason", batch_reason),
+                    "batch_id":     batch_id,
+                    "batch_reason": batch_reason,
+                },
+            }
+            self._append_event(event)
+            events.append(event)
+
+        return events
+
+    def add_batch_items(
+        self,
+        items: List[Dict[str, Any]],
+        researcher: str,
+        batch_reason: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Register multiple new inventory items in one operation.
+
+        Parameters
+        ----------
+        items : list of dict
+            Each dict must have ``item_name`` (str) and ``quantity`` (int).
+            Additional keys become extra fields on the item.
+        researcher : str
+            Display name of the logged-in user.
+        batch_reason : str
+            Shared reason / order reference.
+
+        Returns
+        -------
+        list of ITEM_CREATED event dicts
+        """
+        batch_id = self._new_ulid()
+        events: List[Dict[str, Any]] = []
+        ts = self._now_iso()
+
+        for item in items:
+            item_id = self._new_ulid()
+            payload: Dict[str, Any] = {
+                "item_name": item.get("item_name", "").strip(),
+                "quantity":  int(item.get("quantity", 0)),
+                "researcher": researcher,
+                "reason":    item.get("reason", batch_reason),
+                "batch_id":  batch_id,
+                "batch_reason": batch_reason,
+            }
+            # Carry any additional fields (custom schema fields etc.)
+            for k, v in item.items():
+                if k not in ("item_name", "quantity", "researcher", "reason"):
+                    payload[k] = v
+
+            event: Dict[str, Any] = {
+                "id":        self._new_ulid(),
+                "item_id":   item_id,
+                "timestamp": ts,
+                "type":      EVENT_ITEM_CREATED,
+                "payload":   payload,
+            }
+            self._append_event(event)
+            events.append(event)
+
+        return events
         """Return all events in chronological order."""
         return self._load_events()
 
