@@ -60,7 +60,8 @@ deploy_compute_engine() {
     echo ""
     echo "▶  Creating Compute Engine instance…"
 
-    # Build startup script inline
+    # Build startup script inline — secrets are NOT embedded here; the operator
+    # must copy .env to the instance post-provisioning (see instructions below).
     STARTUP=$(cat <<STARTUP
 #!/bin/bash
 set -euo pipefail
@@ -76,11 +77,12 @@ cd /opt
 git clone ${APP_REPO_URL} brainmaze-ledger
 cd brainmaze-ledger
 
+# .env will be written by the operator after provisioning – see deploy output.
 cat > .env <<ENV
 APP_PORT=${APP_PORT}
 GIT_AUTH_METHOD=PAT
-GIT_TOKEN=${GIT_TOKEN}
-GIT_REPO_URL=${GIT_REPO_URL}
+GIT_TOKEN=REPLACE_ME
+GIT_REPO_URL=REPLACE_ME
 GIT_BRANCH=main
 ENV
 
@@ -120,6 +122,13 @@ STARTUP
     echo "  External IP  : ${EXTERNAL_IP}"
     echo "  App URL      : http://${EXTERNAL_IP}:${APP_PORT}"
     echo "  SSH          : gcloud compute ssh ${INSTANCE_NAME} --zone=${ZONE}"
+    echo ""
+    echo "⚠️  ACTION REQUIRED — update secrets on the VM:"
+    echo "  gcloud compute ssh ${INSTANCE_NAME} --zone=${ZONE} -- \\"
+    echo "    'sudo sed -i \"s|GIT_TOKEN=REPLACE_ME|GIT_TOKEN=<your-token>|\" /opt/brainmaze-ledger/.env && \\"
+    echo "     sudo sed -i \"s|GIT_REPO_URL=REPLACE_ME|GIT_REPO_URL=<your-repo-url>|\" /opt/brainmaze-ledger/.env && \\"
+    echo "     cd /opt/brainmaze-ledger && sudo docker-compose restart'"
+    echo ""
     echo "  ℹ️   Startup script is running – wait ~3 minutes for the app to be ready."
 }
 
@@ -142,6 +151,19 @@ deploy_cloud_run() {
         --region="${REGION}"
 
     echo "▶  Deploying to Cloud Run…"
+    # GIT_TOKEN and GIT_REPO_URL are passed as env vars here for convenience.
+    # For production use, prefer Cloud Run --update-secrets to pull from
+    # Secret Manager instead of embedding values in the deployment command.
+    gcloud run deploy "${INSTANCE_NAME}" \
+        --image="${IMAGE_NAME}:latest" \
+        --region="${REGION}" \
+        --platform=managed \
+        --port="${APP_PORT}" \
+        --allow-unauthenticated \
+        --memory=512Mi \
+        --cpu=1 \
+        --set-env-vars="DATA_DIR=/tmp/data,REPORTS_DIR=/tmp/reports,GIT_REPO_URL=${GIT_REPO_URL}" \
+        --update-secrets="GIT_TOKEN=brainmaze-git-token:latest" 2>/dev/null || \
     gcloud run deploy "${INSTANCE_NAME}" \
         --image="${IMAGE_NAME}:latest" \
         --region="${REGION}" \

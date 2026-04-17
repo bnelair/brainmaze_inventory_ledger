@@ -223,15 +223,29 @@ def _render_custom_field_inputs(prefix: str = "") -> Dict[str, Any]:
         key = f"{prefix}_{fname}"
 
         if ftype == "select":
-            opts = field.get("options", [])
-            idx = opts.index(default) if default in opts else 0
-            values[fname] = st.selectbox(label + star, opts, index=idx, key=key)
+            opts = field.get("options")
+            opts = opts if isinstance(opts, list) else []
+            if opts:
+                idx = opts.index(default) if default in opts else 0
+                values[fname] = st.selectbox(label + star, opts, index=idx, key=key)
+            else:
+                st.error(
+                    f"Custom field '{label}' is configured as a select field but has no options. "
+                    "Edit the schema in **Project Settings** to add options."
+                )
+                values[fname] = st.text_input(label + star, value=str(default), key=key)
         elif ftype == "number":
-            values[fname] = st.number_input(
-                label + star, value=float(default) if default != "" else 0.0, key=key
-            )
+            try:
+                num_default = float(default) if default not in ("", None) else 0.0
+            except (ValueError, TypeError):
+                num_default = 0.0
+            values[fname] = st.number_input(label + star, value=num_default, key=key)
         elif ftype == "checkbox":
-            values[fname] = st.checkbox(label, value=bool(default), key=key)
+            if isinstance(default, bool):
+                bool_default = default
+            else:
+                bool_default = str(default).lower() in {"true", "1", "yes", "on"}
+            values[fname] = st.checkbox(label, value=bool_default, key=key)
         else:
             values[fname] = st.text_input(label + star, value=str(default), key=key)
     return values
@@ -281,11 +295,13 @@ def page_setup_wizard() -> None:
                 active=True,
             )
             if ok:
-                _proj_mgr().create_project(
-                    name="Default Inventory",
-                    description="Default project created during first-run setup.",
-                    created_by=username.strip(),
-                )
+                proj_mgr = _proj_mgr()
+                if not proj_mgr.list_projects():
+                    proj_mgr.create_project(
+                        name="Default Inventory",
+                        description="Default project created during first-run setup.",
+                        created_by=username.strip(),
+                    )
                 st.success("✅ Admin account created. Please log in.")
                 st.cache_resource.clear()
                 st.rerun()
@@ -1538,6 +1554,9 @@ def page_project_settings() -> None:
             safe_name = f_name.strip().lower().replace(" ", "_")
             if any(f["name"] == safe_name for f in existing_fields):
                 errs.append(f"Field '{safe_name}' already exists.")
+            parsed_options = [o.strip() for o in f_options.split(",") if o.strip()]
+            if f_type == "select" and not parsed_options:
+                errs.append("A 'select' field requires at least one option.")
             for err in errs:
                 st.error(err)
             if not errs:
@@ -1548,10 +1567,8 @@ def page_project_settings() -> None:
                     "default":  f_default.strip(),
                     "required": f_required,
                 }
-                if f_type == "select" and f_options.strip():
-                    new_field["options"] = [
-                        o.strip() for o in f_options.split(",") if o.strip()
-                    ]
+                if f_type == "select":
+                    new_field["options"] = parsed_options
                 existing_fields.append(new_field)
                 schema["custom_fields"] = existing_fields
                 pm.save_schema(project_id, schema)

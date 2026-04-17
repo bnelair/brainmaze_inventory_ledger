@@ -1,7 +1,7 @@
 """
 PDF Report Generation for Brainmaze Inventory Ledger.
 
-Uses fpdf2 to produce two document types:
+Uses fpdf2 to produce the following document types:
 
 1. **Stock Sheet** – landscape A4 table of current inventory, suitable for
    printing and posting on closet doors / bin labels.
@@ -9,6 +9,11 @@ Uses fpdf2 to produce two document types:
    with ULID, item name, quantity change, reason, and dual signature lines
    for researcher and supervisor.
 3. **Item History** – full chronological change log for a single item.
+4. **Batch Transfer Slip** – multi-row document summarising a batch transfer
+   operation, listing source item, destination, and transferred quantity for
+   each row.
+5. **Transfer Slip** – single-transfer confirmation analogous to a Change Slip
+   but specific to location-transfer events.
 """
 
 from __future__ import annotations

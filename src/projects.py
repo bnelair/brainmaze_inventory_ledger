@@ -200,6 +200,13 @@ class ProjectManager:
             slug = f"{base_slug}-{n}"
             n += 1
 
+        # Validate final slug (guard against edge-case names that produce an invalid slug)
+        if not _SLUG_RE.match(slug):
+            return {}, (
+                f"Could not generate a valid project slug from '{name}'. "
+                "Please use a name containing at least two alphanumeric characters."
+            )
+
         proj_id = self._new_id()
         proj_dir = self.projects_dir / slug
         proj_dir.mkdir(parents=True, exist_ok=True)

@@ -42,7 +42,8 @@ services:
 
       # SSH keys for key-based Git auth (read-only, optional)
       # Comment out if using PAT/APP auth.
-      - ${SSH_DIR:-~/.ssh}:/root/.ssh:ro
+      # NOTE: SSH_DIR must be an absolute path (tilde expansion is unreliable in Compose).
+      - ${SSH_DIR:-${HOME}/.ssh}:/root/.ssh:ro
 
     # ── Ports ────────────────────────────────────────────────────────────────
     ports:
