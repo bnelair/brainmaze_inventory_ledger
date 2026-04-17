@@ -151,28 +151,35 @@ deploy_cloud_run() {
         --region="${REGION}"
 
     echo "▶  Deploying to Cloud Run…"
-    # GIT_TOKEN and GIT_REPO_URL are passed as env vars here for convenience.
-    # For production use, prefer Cloud Run --update-secrets to pull from
-    # Secret Manager instead of embedding values in the deployment command.
-    gcloud run deploy "${INSTANCE_NAME}" \
-        --image="${IMAGE_NAME}:latest" \
-        --region="${REGION}" \
-        --platform=managed \
-        --port="${APP_PORT}" \
-        --allow-unauthenticated \
-        --memory=512Mi \
-        --cpu=1 \
-        --set-env-vars="DATA_DIR=/tmp/data,REPORTS_DIR=/tmp/reports,GIT_REPO_URL=${GIT_REPO_URL}" \
-        --update-secrets="GIT_TOKEN=brainmaze-git-token:latest" 2>/dev/null || \
-    gcloud run deploy "${INSTANCE_NAME}" \
-        --image="${IMAGE_NAME}:latest" \
-        --region="${REGION}" \
-        --platform=managed \
-        --port="${APP_PORT}" \
-        --allow-unauthenticated \
-        --memory=512Mi \
-        --cpu=1 \
-        --set-env-vars="DATA_DIR=/tmp/data,REPORTS_DIR=/tmp/reports,GIT_TOKEN=${GIT_TOKEN},GIT_REPO_URL=${GIT_REPO_URL}"
+    # Preferred: use Secret Manager so GIT_TOKEN is never visible in process args or logs.
+    # If the secret 'brainmaze-git-token' doesn't exist yet, fall back to env var.
+    # To create the secret:
+    #   echo -n "${GIT_TOKEN}" | gcloud secrets create brainmaze-git-token --data-file=-
+    if gcloud secrets describe brainmaze-git-token --project="${PROJECT_ID}" >/dev/null 2>&1; then
+        gcloud run deploy "${INSTANCE_NAME}" \
+            --image="${IMAGE_NAME}:latest" \
+            --region="${REGION}" \
+            --platform=managed \
+            --port="${APP_PORT}" \
+            --allow-unauthenticated \
+            --memory=512Mi \
+            --cpu=1 \
+            --set-env-vars="DATA_DIR=/tmp/data,REPORTS_DIR=/tmp/reports,GIT_REPO_URL=${GIT_REPO_URL}" \
+            --update-secrets="GIT_TOKEN=brainmaze-git-token:latest"
+    else
+        echo "  ⚠️  Secret 'brainmaze-git-token' not found in Secret Manager."
+        echo "       Falling back to env var. For production, create the secret:"
+        echo "       echo -n \"\${GIT_TOKEN}\" | gcloud secrets create brainmaze-git-token --data-file=-"
+        gcloud run deploy "${INSTANCE_NAME}" \
+            --image="${IMAGE_NAME}:latest" \
+            --region="${REGION}" \
+            --platform=managed \
+            --port="${APP_PORT}" \
+            --allow-unauthenticated \
+            --memory=512Mi \
+            --cpu=1 \
+            --set-env-vars="DATA_DIR=/tmp/data,REPORTS_DIR=/tmp/reports,GIT_TOKEN=${GIT_TOKEN},GIT_REPO_URL=${GIT_REPO_URL}"
+    fi
 
     SERVICE_URL=$(gcloud run services describe "${INSTANCE_NAME}" \
         --region="${REGION}" \

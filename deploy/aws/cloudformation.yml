@@ -189,8 +189,6 @@ Resources:
           echo "${DATA_DEVICE}  ${DATA_DIR}  ext4  defaults,nofail  0  2" >> /etc/fstab
 
           echo "=== Writing .env ==="
-          DATA_DIR=/data/brainmaze
-          mkdir -p "${DATA_DIR}"
           cat > .env <<ENV
           APP_PORT=${AppPort}
           GIT_AUTH_METHOD=PAT
