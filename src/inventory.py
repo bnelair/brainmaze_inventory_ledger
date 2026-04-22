@@ -33,7 +33,12 @@ EVENT_STOCK_CHANGED = "STOCK_CHANGED"
 EVENT_ITEM_UPDATED = "ITEM_UPDATED"
 
 # Fields that should never be overwritten by ITEM_UPDATED payload keys
-_SYSTEM_FIELDS = {"researcher", "reason"}
+_SYSTEM_FIELDS = {
+    "researcher", "reason",
+    # quantity is managed exclusively via STOCK_CHANGED; item_id and timestamps
+    # are immutable identity/audit fields that must never be clobbered.
+    "quantity", "item_id", "created_at", "created_by",
+}
 
 
 class InventoryLedger:
@@ -430,10 +435,27 @@ class InventoryLedger:
             }
             if batch_id:
                 create_payload["batch_id"] = batch_id
-            for field in ("unit", "category", "supplier", "item_id_label", "notes"):
-                val = source.get(field, "")
+            # Copy fixed well-known fields first, then any remaining custom fields
+            _TRANSFER_EXCLUDED = {
+                "item_id", "item_name", "location", "quantity", "qty", "qty_delta",
+                "researcher", "reason", "transfer_from", "transfer_to",
+                "timestamp", "type", "id", "created_at", "last_updated", "created_by",
+            }
+            for field_name in ("unit", "category", "supplier", "item_id_label", "notes"):
+                val = source.get(field_name, "")
                 if val:
-                    create_payload[field] = val
+                    create_payload[field_name] = val
+            for field_name, val in source.items():
+                if field_name in _TRANSFER_EXCLUDED or field_name in create_payload:
+                    continue
+                try:
+                    if pd.isna(val):
+                        continue
+                except (TypeError, ValueError):
+                    pass
+                if val == "":
+                    continue
+                create_payload[field_name] = val
             create_event: Dict[str, Any] = {
                 "id": self._new_ulid(),
                 "item_id": new_item_id,

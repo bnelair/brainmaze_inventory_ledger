@@ -153,7 +153,7 @@ Phase 5: Integrate Git-Crypt and the GitManager for secure private repo syncing.
 
 Phase 6: Add/enhance the ReportGenerator for printable PDFs and ensure all reports are web-downloadable.
 
-# B) Technical Requirements (SRS) - Final Revision
+# Appendix A) Technical Requirements Reference
 ## 1. Output & Reporting
 PDF Generation: The system shall use a library (e.g., ReportLab or FPDF2) to generate clean, printable PDF documents of the inventory tables and individual transaction records.
 

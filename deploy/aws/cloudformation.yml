@@ -176,6 +176,18 @@ Resources:
           git clone ${AppRepoUrl} brainmaze-ledger
           cd brainmaze-ledger
 
+          echo "=== Mounting persistent data volume ==="
+          # /dev/xvdf is the EBS DataVolume attached via DataVolumeAttachment
+          DATA_DEVICE=/dev/xvdf
+          DATA_DIR=/data/brainmaze
+          if ! blkid "${DATA_DEVICE}" | grep -q ext4; then
+            mkfs.ext4 "${DATA_DEVICE}"
+          fi
+          mkdir -p "${DATA_DIR}"
+          mount "${DATA_DEVICE}" "${DATA_DIR}" || true
+          # Persist mount across reboots
+          echo "${DATA_DEVICE}  ${DATA_DIR}  ext4  defaults,nofail  0  2" >> /etc/fstab
+
           echo "=== Writing .env ==="
           cat > .env <<ENV
           APP_PORT=${AppPort}
@@ -186,7 +198,17 @@ Resources:
           GIT_USER_NAME=Brainmaze Bot
           GIT_USER_EMAIL=brainmaze@lab.local
           GIT_CRYPT_KEY=${GitCryptKey}
+          SSH_DIR=/root/.ssh
           ENV
+
+          # Override the inventory_data bind-mount to point at the persistent volume
+          cat > docker-compose.override.yml <<OVERRIDE
+          version: "3.9"
+          services:
+            app:
+              volumes:
+                - ${DATA_DIR}:/app/data
+          OVERRIDE
 
           echo "=== Starting application ==="
           docker compose pull 2>/dev/null || true

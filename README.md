@@ -85,7 +85,7 @@ brainmaze_inventory_ledger/
 │   └── version.py        # Single version constant (__version__)
 │
 ├── data/
-│   └── schema.yaml       # Default project schema & category list
+│   └── schema.yaml       # Example/legacy schema reference (not used for new project creation)
 │
 ├── deploy/
 │   ├── aws/
@@ -110,14 +110,16 @@ brainmaze_inventory_ledger/
 ## 🖥️ Application Pages
 
 ### 📦 Current Stock
-Live inventory table computed by replaying all events.  Rows with quantity ≤
-minimum stock level are highlighted in red.  A **Download Stock Sheet (PDF)**
-button generates a printable landscape A4 table.
+Live inventory table computed by replaying all events.  If a `min_stock_level`
+custom column is configured (see **Project Settings**), rows with quantity ≤
+that threshold are highlighted in red.  A **Download Stock Sheet (PDF)** button
+generates a printable landscape A4 table.
 
 ### ➕ Add Item
 Register a new item with initial quantity, unit, category, location, supplier,
-catalog number, and minimum stock threshold.  A confirmation slip PDF is
-immediately available for download and physical filing.
+and catalog number.  Any custom columns you define in **Project Settings** (e.g.
+`min_stock_level` for low-stock thresholds) are also captured here.  A
+confirmation slip PDF is immediately available for download and physical filing.
 
 ### 🔄 Record Change
 Select an existing item and record a stock addition, removal, or exact-value

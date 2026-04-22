@@ -194,9 +194,11 @@ class GitManager:
         if not self.repo_url:
             return ""
         if self.auth_method in ("PAT", "APP") and self.token:
+            from urllib.parse import quote as _quote
             parsed = urlparse(self.repo_url)
             if parsed.scheme in ("http", "https"):
-                netloc = f"{self.token}@{parsed.hostname}"
+                token = _quote(self.token, safe="")
+                netloc = f"{token}@{parsed.hostname}"
                 if parsed.port:
                     netloc += f":{parsed.port}"
                 return urlunparse(parsed._replace(netloc=netloc, scheme="https"))
