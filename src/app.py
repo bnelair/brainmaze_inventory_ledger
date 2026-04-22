@@ -309,7 +309,7 @@ def page_login() -> None:
                 uname = st.text_input("Username")
                 passw = st.text_input("Password", type="password")
                 sub   = st.form_submit_button(
-                    "Log In", type="primary", use_container_width=True
+                    "Log In", type="primary", width='stretch'
                 )
             if sub:
                 user = _auth_mgr().authenticate(uname.strip(), passw)
@@ -343,7 +343,7 @@ def page_login() -> None:
                     "Confirm Password *", type="password", key="reg_pw2"
                 )
                 r_sub = st.form_submit_button(
-                    "📝 Submit Registration", use_container_width=True
+                    "📝 Submit Registration", width='stretch'
                 )
             if r_sub:
                 if r_pw1 != r_pw2:
@@ -448,7 +448,7 @@ def _render_sidebar() -> str:
             pass
 
         st.divider()
-        if st.button("🚪 Log Out", use_container_width=True):
+        if st.button("🚪 Log Out", width='stretch'):
             for k in ["user", "project_id"]:
                 st.session_state.pop(k, None)
             st.rerun()
@@ -561,7 +561,7 @@ def page_stock() -> None:
     show_df = filtered[display_cols].rename(columns=col_labels)
     st.dataframe(
         show_df.style.apply(_hl_low, axis=1),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
 
@@ -618,7 +618,7 @@ def page_add_item() -> None:
             placeholder="e.g., Initial stock entry, Purchased from supplier",
         )
         submitted = st.form_submit_button(
-            "✅ Add Item", type="primary", use_container_width=True
+            "✅ Add Item", type="primary", width='stretch'
         )
 
     if submitted:
@@ -697,7 +697,7 @@ def page_batch_add() -> None:
             empty_df,
             column_config=core_col_config,
             num_rows="dynamic",
-            use_container_width=True,
+            width='stretch',
             key="batch_add_editor",
         )
         batch_reason_e = st.text_input(
@@ -748,7 +748,7 @@ def page_batch_add() -> None:
             try:
                 df_csv = pd.read_csv(uploaded)
                 st.subheader("Preview")
-                st.dataframe(df_csv, use_container_width=True, hide_index=True)
+                st.dataframe(df_csv, width='stretch', hide_index=True)
 
                 batch_reason_c = st.text_input(
                     "Batch Reason *",
@@ -849,7 +849,7 @@ def page_record_change() -> None:
             placeholder="e.g., Used in experiment #42, Restocked from supplier",
         )
         submitted = st.form_submit_button(
-            "✅ Record Change", type="primary", use_container_width=True
+            "✅ Record Change", type="primary", width='stretch'
         )
 
     if submitted:
@@ -916,7 +916,7 @@ def page_batch_change() -> None:
             ["item_name", "quantity", "unit", "category"]
         ].copy()
         preview.columns = ["Item Name", "Current Qty", "Unit", "Category"]
-        st.dataframe(preview, use_container_width=True, hide_index=True)
+        st.dataframe(preview, width='stretch', hide_index=True)
 
     with st.form("batch_change_form", clear_on_submit=True):
         bc1, bc2 = st.columns(2)
@@ -935,7 +935,7 @@ def page_batch_change() -> None:
         submitted = st.form_submit_button(
             f"✅ Apply to {len(selected_ids)} item(s)",
             type="primary",
-            use_container_width=True,
+            width='stretch',
         )
 
     if submitted:
@@ -1214,7 +1214,7 @@ def page_history() -> None:
     if type_filter != "All":
         df_hist = df_hist[df_hist["Type"].str.lower() == type_filter.lower()]
 
-    st.dataframe(df_hist, use_container_width=True, hide_index=True)
+    st.dataframe(df_hist, width='stretch', hide_index=True)
 
     st.divider()
     st.subheader("🖨️ Print Slip for a Specific Event")
@@ -1275,7 +1275,7 @@ def page_reports() -> None:
                 file_name=f"stock_sheet_{datetime.now().strftime('%Y%m%d')}.pdf",
                 mime="application/pdf",
                 type="primary",
-                use_container_width=True,
+                width='stretch',
             )
 
     with col2:
@@ -1315,7 +1315,7 @@ def page_reports() -> None:
                     data=pdf,
                     file_name=f"history_{sel_name.replace(' ', '_')}.pdf",
                     mime="application/pdf",
-                    use_container_width=True,
+                    width='stretch',
                 )
 
     st.divider()
@@ -1328,7 +1328,7 @@ def page_reports() -> None:
                 data=df.to_csv(index=False).encode("utf-8"),
                 file_name=f"stock_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width='stretch',
             )
     with ex2:
         events_all = ledger.get_event_history()
@@ -1339,7 +1339,7 @@ def page_reports() -> None:
                                 ensure_ascii=False).encode("utf-8"),
                 file_name=f"events_{datetime.now().strftime('%Y%m%d')}.json",
                 mime="application/json",
-                use_container_width=True,
+                width='stretch',
             )
 
 
@@ -1424,20 +1424,20 @@ def page_git_sync() -> None:
     st.divider()
     ac1, ac2, ac3 = st.columns(3)
     with ac1:
-        if st.button("📤 Commit", use_container_width=True):
+        if st.button("📤 Commit", width='stretch'):
             ok, msg = git.commit_all()
             (st.success if ok else st.error)(msg)
     with ac2:
-        if st.button("⬇️ Pull", use_container_width=True):
+        if st.button("⬇️ Pull", width='stretch'):
             ok, msg = git.pull()
             (st.success if ok else st.error)(msg)
     with ac3:
-        if st.button("⬆️ Push", use_container_width=True):
+        if st.button("⬆️ Push", width='stretch'):
             ok, msg = git.push()
             (st.success if ok else st.error)(msg)
 
     if st.button("🔄 Full Sync (Commit → Pull → Push)", type="primary",
-                 use_container_width=True):
+                 width='stretch'):
         with st.spinner("Syncing…"):
             ok, msg = git.sync()
         (st.success if ok else st.error)(f"{'✅' if ok else '❌'} {msg}")

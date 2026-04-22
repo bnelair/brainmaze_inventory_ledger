@@ -1,5 +1,3 @@
-version: "3.9"  # kept for compatibility with older Docker Compose v1 installations
-
 services:
   app:
     build:
@@ -9,46 +7,28 @@ services:
     container_name: brainmaze-ledger
     restart: unless-stopped
 
-    # ── Environment ──────────────────────────────────────────────────────────
     environment:
-      # Application paths (do not change unless you know what you're doing)
       - DATA_DIR=/app/data
       - REPORTS_DIR=/app/reports
-
-      # Git authentication  ── PAT | SSH | APP | BASIC
       - GIT_AUTH_METHOD=${GIT_AUTH_METHOD:-PAT}
       - GIT_TOKEN=${GIT_TOKEN:-}
-      - GIT_USERNAME=${GIT_USERNAME:-}      # BASIC auth only (username for https://<user>:<token>@host)
+      - GIT_USERNAME=${GIT_USERNAME:-}
       - GIT_REPO_URL=${GIT_REPO_URL:-}
       - GIT_BRANCH=${GIT_BRANCH:-main}
       - GIT_USER_NAME=${GIT_USER_NAME:-Brainmaze Bot}
       - GIT_USER_EMAIL=${GIT_USER_EMAIL:-brainmaze@lab.local}
-
-      # git-crypt (optional – only for encrypted private repositories)
       - GIT_CRYPT_KEY=${GIT_CRYPT_KEY:-}
-
-      # SSH host key verification (SSH auth only)
-      # GIT_ALLOW_INSECURE_SSH=true disables host key checking (not recommended for production)
       - GIT_ALLOW_INSECURE_SSH=${GIT_ALLOW_INSECURE_SSH:-false}
       - GIT_SSH_KNOWN_HOSTS=${GIT_SSH_KNOWN_HOSTS:-}
 
-    # ── Volumes ──────────────────────────────────────────────────────────────
     volumes:
-      # Persistent inventory data (JSONL events + schema.yaml)
       - ./inventory_data:/app/data
-
-      # Temporary PDF cache (not persisted between container restarts)
       - ./reports:/app/reports
-
-      # SSH keys for key-based Git auth (read-only, optional)
-      # Comment out if using PAT/APP auth.
       - ${SSH_DIR:-~/.ssh}:/root/.ssh:ro
 
-    # ── Ports ────────────────────────────────────────────────────────────────
     ports:
       - "${APP_PORT:-8501}:8501"
 
-    # ── Health check ─────────────────────────────────────────────────────────
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
       interval: 30s
