@@ -25,10 +25,10 @@ services:
       - ./inventory_data:/app/data
       - ./reports:/app/reports
 
-      # SSH keys for key-based Git auth (read-only, optional)
-      # Comment out if using PAT/APP auth.
-      # NOTE: SSH_DIR must be an absolute path (tilde expansion is unreliable in Compose).
-      - ${SSH_DIR:-${HOME}/.ssh}:/root/.ssh:ro
+      # SSH keys for key-based Git auth (read-only, optional).
+      # Uncomment the line below and set SSH_DIR to an absolute path in your .env file.
+      # Example .env entry:  SSH_DIR=/home/youruser/.ssh
+      # - ${SSH_DIR}:/root/.ssh:ro
 
     ports:
       - "${APP_PORT:-8501}:8501"
