@@ -1,0 +1,20 @@
+project_name: "Brainmaze Laboratory Inventory"
+schema_version: "1.0"
+category_options:
+  - Reagent
+  - Equipment
+  - Consumable
+  - Chemical
+  - Biological
+  - Safety
+  - Administrative
+  - Other
+location_options:
+  - "Freezer -20°C"
+  - "Freezer -80°C"
+  - "Fridge 4°C"
+  - Room Temperature
+  - Shelf A
+  - Shelf B
+  - Cabinet
+  - Other

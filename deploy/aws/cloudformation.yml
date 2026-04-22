@@ -1,0 +1,239 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Brainmaze Inventory Ledger – EC2 deployment with Docker Compose.
+  Provisions a VPC, public subnet, security group, and an EC2 instance
+  that installs Docker + Docker Compose and auto-starts the application.
+
+# ─── Parameters ──────────────────────────────────────────────────────────────
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.micro, t3.small, t3.medium, t3.large]
+    Description: EC2 instance type.
+
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 key pair for SSH access.
+
+  AllowedCIDR:
+    Type: String
+    Default: "0.0.0.0/0"
+    Description: CIDR range allowed to reach port 8501. Restrict to your IP in production.
+
+  AppPort:
+    Type: Number
+    Default: 8501
+
+  GitRepoUrl:
+    Type: String
+    Default: ""
+    Description: "(Optional) URL of the remote inventory-data Git repository."
+
+  GitToken:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: "(Optional) Personal Access Token for Git authentication."
+
+  GitCryptKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: "(Optional) Base64-encoded git-crypt key."
+
+  AppRepoUrl:
+    Type: String
+    Default: "https://github.com/bnelair/brainmaze_inventory_ledger.git"
+    Description: "URL of the Brainmaze Inventory Ledger application repository."
+
+# ─── Resources ───────────────────────────────────────────────────────────────
+Resources:
+
+  # VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: brainmaze-ledger-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: "10.0.1.0/24"
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: brainmaze-ledger-public-subnet
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref RouteTable
+
+  # Security Group
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Brainmaze Inventory Ledger – allow web UI and SSH
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref AppPort
+          ToPort: !Ref AppPort
+          CidrIp: !Ref AllowedCIDR
+          Description: Streamlit web UI
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedCIDR
+          Description: SSH access
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: "0.0.0.0/0"
+
+  # EBS volume for persistent inventory data (separate from root volume)
+  DataVolume:
+    Type: AWS::EC2::Volume
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Size: 10
+      VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: brainmaze-ledger-data
+
+  # EC2 Instance
+  Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      ImageId: "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}"
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+      Tags:
+        - Key: Name
+          Value: brainmaze-inventory-ledger
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euo pipefail
+          exec > /var/log/brainmaze-init.log 2>&1
+
+          echo "=== Installing system packages ==="
+          dnf update -y
+          dnf install -y docker git
+
+          echo "=== Starting Docker ==="
+          systemctl enable --now docker
+          usermod -aG docker ec2-user
+
+          echo "=== Installing Docker Compose plugin ==="
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" \
+              -o /usr/local/lib/docker/cli-plugins/docker-compose
+          chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+          echo "=== Cloning application ==="
+          cd /opt
+          git clone ${AppRepoUrl} brainmaze-ledger
+          cd brainmaze-ledger
+
+          echo "=== Mounting persistent data volume ==="
+          # /dev/xvdf is the EBS DataVolume attached via DataVolumeAttachment
+          DATA_DEVICE=/dev/xvdf
+          DATA_DIR=/data/brainmaze
+          if ! blkid "${DATA_DEVICE}" | grep -q ext4; then
+            mkfs.ext4 "${DATA_DEVICE}"
+          fi
+          mkdir -p "${DATA_DIR}"
+          mount "${DATA_DEVICE}" "${DATA_DIR}" || true
+          # Persist mount across reboots
+          echo "${DATA_DEVICE}  ${DATA_DIR}  ext4  defaults,nofail  0  2" >> /etc/fstab
+
+          echo "=== Writing .env ==="
+          cat > .env <<ENV
+          APP_PORT=${AppPort}
+          GIT_AUTH_METHOD=PAT
+          GIT_TOKEN=${GitToken}
+          GIT_REPO_URL=${GitRepoUrl}
+          GIT_BRANCH=main
+          GIT_USER_NAME=Brainmaze Bot
+          GIT_USER_EMAIL=brainmaze@lab.local
+          GIT_CRYPT_KEY=${GitCryptKey}
+          SSH_DIR=/root/.ssh
+          ENV
+
+          # Override the inventory_data bind-mount to point at the persistent volume
+          cat > docker-compose.override.yml <<OVERRIDE
+          version: "3.9"
+          services:
+            app:
+              volumes:
+                - ${DATA_DIR}:/app/data
+          OVERRIDE
+
+          echo "=== Starting application ==="
+          docker compose pull 2>/dev/null || true
+          docker compose build
+          docker compose up -d
+
+          echo "=== Done ==="
+
+  DataVolumeAttachment:
+    Type: AWS::EC2::VolumeAttachment
+    Properties:
+      InstanceId: !Ref Instance
+      VolumeId: !Ref DataVolume
+      Device: /dev/xvdf
+
+# ─── Outputs ─────────────────────────────────────────────────────────────────
+Outputs:
+  InstancePublicIP:
+    Description: Public IP address of the EC2 instance
+    Value: !GetAtt Instance.PublicIp
+
+  InstancePublicDNS:
+    Description: Public DNS name of the EC2 instance
+    Value: !GetAtt Instance.PublicDnsName
+
+  AppURL:
+    Description: Brainmaze Inventory Ledger URL
+    Value: !Sub "http://${Instance.PublicDnsName}:${AppPort}"
