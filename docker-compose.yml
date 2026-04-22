@@ -22,8 +22,8 @@ services:
       - GIT_SSH_KNOWN_HOSTS=${GIT_SSH_KNOWN_HOSTS:-}
 
     volumes:
-      - ./inventory_data:/app/data
-      - ./reports:/app/reports
+      - ${DATA_HOST_DIR:-./inventory_data}:/app/data
+      - ${REPORTS_HOST_DIR:-./reports}:/app/reports
 
       # SSH keys for key-based Git auth (read-only, optional).
       # Uncomment the line below and set SSH_DIR to an absolute path in your .env file.
