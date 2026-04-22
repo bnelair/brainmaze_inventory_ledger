@@ -54,8 +54,9 @@ _DEFAULT_SCHEMA: Dict[str, Any] = {
     "custom_fields": [],
 }
 
-# Slug: lowercase letters, digits, and hyphens; max 64 chars
-_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{1,62}[a-z0-9]$")
+# Slug: lowercase letters, digits, and hyphens; 2-64 chars, must start/end
+# with an alphanumeric character
+_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}[a-z0-9]$")
 
 
 def _slugify(name: str) -> str:
@@ -193,11 +194,15 @@ class ProjectManager:
         slug = _slugify(name)
         projects = self._load_registry()
 
-        # Ensure unique slug
+        # Ensure unique slug; truncate base to leave room for the numeric suffix
+        # so the combined slug never exceeds _SLUG_RE's 64-char limit.
         existing_slugs = {p["slug"] for p in projects}
         base_slug, n = slug, 1
         while slug in existing_slugs:
-            slug = f"{base_slug}-{n}"
+            suffix = f"-{n}"
+            # _SLUG_RE requires ending with alnum, so we truncate at 64 - len(suffix)
+            max_base = 64 - len(suffix)
+            slug = f"{base_slug[:max_base].rstrip('-')}{suffix}"
             n += 1
 
         # Validate final slug (guard against edge-case names that produce an invalid slug)

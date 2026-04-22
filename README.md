@@ -85,7 +85,7 @@ brainmaze_inventory_ledger/
 │   └── version.py        # Single version constant (__version__)
 │
 ├── data/
-│   └── schema.yaml       # Default project schema & category list
+│   └── schema.yaml       # Example/legacy schema reference (not used for new project creation)
 │
 ├── deploy/
 │   ├── aws/

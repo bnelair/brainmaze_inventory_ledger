@@ -915,17 +915,15 @@ def page_batch_change() -> None:
 
     item_names: Dict[str, str] = df.set_index("item_id")["item_name"].to_dict()
 
+    label_to_item_id: Dict[str, str] = {
+        f"{name}  (ID: {iid})": iid for iid, name in item_names.items()
+    }
     selected_labels = st.multiselect(
         "Select Items *",
-        options=[f"{name}  (ID: {iid})" for iid, name in item_names.items()],
+        options=list(label_to_item_id.keys()),
         help="Select one or more items to change.",
     )
-    selected_ids: List[str] = []
-    for lbl in selected_labels:
-        for iid, name in item_names.items():
-            if lbl == f"{name}  (ID: {iid})":
-                selected_ids.append(iid)
-                break
+    selected_ids: List[str] = [label_to_item_id[lbl] for lbl in selected_labels]
 
     if selected_ids:
         preview = df[df["item_id"].isin(selected_ids)][
