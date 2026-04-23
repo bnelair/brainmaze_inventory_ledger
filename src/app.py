@@ -927,8 +927,15 @@ def page_batch_change() -> None:
 
     item_names: Dict[str, str] = df.set_index("item_id")["item_name"].to_dict()
 
+    # Build labels that include location so items in multiple spots are distinct
+    def _batch_item_label(row: Any) -> str:
+        loc = str(row.get("location", "") or "").strip()
+        suffix = f" @ {loc}" if loc else ""
+        return f"{row['item_name']}{suffix}  (ID: {row['item_id']})"
+
     label_to_item_id: Dict[str, str] = {
-        f"{name}  (ID: {iid})": iid for iid, name in item_names.items()
+        _batch_item_label(row): str(row["item_id"])
+        for _, row in df.iterrows()
     }
     selected_labels = st.multiselect(
         "Select Items *",
@@ -938,10 +945,15 @@ def page_batch_change() -> None:
     selected_ids: List[str] = [label_to_item_id[lbl] for lbl in selected_labels]
 
     if selected_ids:
-        preview = df[df["item_id"].isin(selected_ids)][
-            ["item_name", "quantity", "unit", "category"]
-        ].copy()
-        preview.columns = ["Item Name", "Current Qty", "Unit", "Category"]
+        preview_cols = [c for c in ["item_name", "quantity", "unit", "category", "location"]
+                        if c in df.columns]
+        preview = df[df["item_id"].isin(selected_ids)][preview_cols].copy()
+        preview.columns = [c.replace("item_name", "Item Name")
+                            .replace("quantity", "Current Qty")
+                            .replace("unit", "Unit")
+                            .replace("category", "Category")
+                            .replace("location", "Location")
+                           for c in preview_cols]
         st.dataframe(preview, width='stretch', hide_index=True)
 
     with st.form("batch_change_form", clear_on_submit=True):
