@@ -816,22 +816,34 @@ def page_record_change() -> None:
         return
 
     item_names: Dict[str, str] = df.set_index("item_id")["item_name"].to_dict()
-    options = {f"{name}  (ID: {iid})": iid for iid, name in item_names.items()}
 
+    # Build labels that include location so items in multiple spots are distinct
+    def _item_label(row: Any) -> str:
+        loc = str(row.get("location", "") or "").strip()
+        suffix = f" @ {loc}" if loc else ""
+        return f"{row['item_name']}{suffix}  (ID: {row['item_id']})"
+
+    options: Dict[str, str] = {
+        _item_label(row): str(row["item_id"])
+        for _, row in df.iterrows()
+    }
+
+    # Item selector lives OUTSIDE the form so the descriptor cards refresh
+    # immediately whenever a different item is chosen.
+    selected_label = st.selectbox("Select Item *", list(options.keys()))
+    item_id = options[selected_label]
+
+    row_match = df[df["item_id"] == item_id]
+    current = row_match.iloc[0] if not row_match.empty else None
+    if current is not None:
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("Current Stock",
+                   f"{current['quantity']} {current.get('unit', 'pcs')}")
+        mc2.metric("Category",  current.get("category", "—"))
+        mc3.metric("Location",  current.get("location", "—"))
+
+    st.divider()
     with st.form("record_change_form", clear_on_submit=True):
-        selected_label = st.selectbox("Select Item *", list(options.keys()))
-        item_id = options[selected_label]
-
-        row_match = df[df["item_id"] == item_id]
-        current = row_match.iloc[0] if not row_match.empty else None
-        if current is not None:
-            mc1, mc2, mc3 = st.columns(3)
-            mc1.metric("Current Stock",
-                       f"{current['quantity']} {current.get('unit', 'pcs')}")
-            mc2.metric("Category",  current.get("category", "—"))
-            mc3.metric("Location",  current.get("location", "—"))
-
-        st.divider()
         dcol1, dcol2 = st.columns(2)
         with dcol1:
             change_type = st.selectbox(
